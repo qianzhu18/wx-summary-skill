@@ -1,8 +1,10 @@
 ---
 name: wx-summary-skill
 description: Interactive WeChat group digest workflow. Reuse saved recent groups, let the user choose a time preset or custom range, then generate either a structured text summary or a local web digest from real wx-cli chat data. Use when the user asks for 微信群聊日报、群聊摘要、群聊信息报、summary from WeChat chat history, or wants a reusable skill that wraps wx-cli / baoyu-style setup without deployment.
+license: MIT
 metadata:
   openclaw:
+    homepage: https://github.com/qianzhu18/wx-summary-skill
     requires:
       anyBins:
         - wx
