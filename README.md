@@ -6,7 +6,7 @@
 
 1. 选择群聊
 2. 选择时间范围
-3. 生成文字摘要或本地网页信息报
+3. 生成文字摘要或本地报纸风网页日报
 
 补充能力：
 
@@ -71,7 +71,7 @@ IGN AI | 洋来，7d，text
 
 源文件保存在 [docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png](docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png)。
 
-下面这张图展示的是同一组数据生成出来的网页周报效果。点击图片可以打开在线预览：
+下面这张图是网页模式的旧版示意图。当前仓库默认网页模式已经切到人民日报式的报纸风网页日报，这张截图后续会更新：
 
 [![IGN AI weekly webpage preview](docs/assets/wx-summary-skill-ign-ai-yanglai-webpage-example-2026-05-18.png)](https://ba40cc13.pinme.dev/)
 
@@ -338,7 +338,7 @@ python3 scripts/skill_state.py save-session \
   --duration-preset 7d \
   --summary-mode text \
   --text-style growth-brief-v1 \
-  --web-style daily-report-v1
+  --web-style people-daily-v1
 ```
 
 ## 手动工作流
@@ -389,7 +389,7 @@ python3 scripts/prepare_wechat_digest.py \
 
 推荐结构见 [references/text-summary-format.md](references/text-summary-format.md)。
 
-### 5B. 输出本地网页信息报
+### 5B. 输出本地网页日报（报纸风）
 
 ```bash
 python3 scripts/render_web_digest.py \

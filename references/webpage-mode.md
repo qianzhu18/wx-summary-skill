@@ -1,12 +1,12 @@
 # Webpage Mode
 
-Use this mode when the user wants a local HTML digest instead of a text-only summary.
+Use this mode when the user wants a local HTML newspaper page instead of a text-only summary.
 
 ## Default style
 
-- style id: `daily-report-v1`
+- style id: `people-daily-v1`
 
-This mode reuses the local analysis bundle and a reviewed `summary.json`, then renders a static local page. It does not publish anything.
+This mode reuses the local analysis bundle and a reviewed `summary.json`, then renders a static local page in a People’s Daily inspired newspaper layout. It does not publish anything.
 
 ## Workflow
 
@@ -38,4 +38,6 @@ The renderer writes:
 - Favor 4-6 strong threads instead of trying to cover everything.
 - Use real names and real quotes.
 - Use `period_in_one_line` for the core takeaway of the selected range.
+- Default to newspaper-style editorial wording: headline, deck, lead, sidebars, timeline, quote rail.
+- Quiet days should still read like an intentional "静版" or "无新稿" edition, not a product empty state.
 - Do not add deployment URLs, domain advice, or server instructions.

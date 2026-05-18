@@ -1,6 +1,6 @@
 ---
 name: wx-summary-skill
-description: Interactive WeChat group digest workflow. Reuse saved recent groups, let the user choose a time preset or custom range, then generate either a structured text summary or a local web digest from real wx-cli chat data. Use when the user asks for 微信群聊日报、群聊摘要、群聊信息报、summary from WeChat chat history, or wants a reusable skill that wraps wx-cli / baoyu-style setup without deployment.
+description: Interactive WeChat group digest workflow. Reuse saved recent groups, let the user choose a time preset or custom range, then generate either a structured text summary or a People's Daily inspired local web newspaper from real wx-cli chat data. Use when the user asks for 微信群聊日报、群聊摘要、群聊信息报、summary from WeChat chat history, or wants a reusable skill that wraps wx-cli / baoyu-style setup without deployment.
 license: MIT
 metadata:
   openclaw:
@@ -17,7 +17,7 @@ metadata:
 2. 选择时间范围
 3. 选择输出模式
 4. 保存最近使用的群和默认配置
-5. 生成文字摘要或本地网页信息报
+5. 生成文字摘要或本地报纸风网页日报
 
 它不负责部署。
 
@@ -148,7 +148,7 @@ python3 scripts/resolve_time_range.py --since YYYY-MM-DD --until YYYY-MM-DD
 Offer:
 
 - `text` - structured text digest
-- `webpage` - local web digest
+- `webpage` - local newspaper-style web daily
 
 Use the saved default summary mode as the recommended option.
 
@@ -159,7 +159,7 @@ Use the saved style default for the chosen mode.
 Current built-in styles:
 
 - text mode: `growth-brief-v1`
-- webpage mode: `daily-report-v1`
+- webpage mode: `people-daily-v1`
 
 Do not ask an extra style question unless:
 
@@ -178,7 +178,7 @@ python3 scripts/skill_state.py save-session \
   --duration-preset 7d \
   --summary-mode text \
   --text-style growth-brief-v1 \
-  --web-style daily-report-v1
+  --web-style people-daily-v1
 ```
 
 Rules:
@@ -242,6 +242,8 @@ python3 scripts/render_web_digest.py \
   --analysis /abs/path/to/analysis.json
 ```
 
+This mode should default to our newspaper-style editorial prompt and renderer, not the older card-style chat digest wording.
+
 This writes local output only:
 
 - `<group_dir>/<since>_<until>.web.md`
@@ -249,7 +251,12 @@ This writes local output only:
 - `<group_dir>/dist/index.html`
 - `<group_dir>/history.json`
 
-Do not add deployment steps.
+Rules:
+
+- Treat the page as a newspaper front page for the selected range.
+- Write headlines, decks, leads, and sidebars in a more editorial tone.
+- When the range is quiet, render it as a calm "静版" or "无新稿" edition instead of a generic empty-state card.
+- Do not add deployment steps.
 
 ## When To Read Raw Messages
 

@@ -2,6 +2,8 @@
 
 `summary.json` is the human-reviewed content file for `webpage` mode.
 
+In the default `people-daily-v1` flow, the same schema drives a newspaper-style webpage rather than a generic dashboard.
+
 ## Shape
 
 ```json
@@ -58,19 +60,19 @@
 ## Field notes
 
 - `headline`
-  The first-screen signal. Keep it short and concrete.
+  The front-page banner. Keep it short, concrete, and declarative.
 - `subheadline`
-  Explain what the selected range was really about.
+  The deck under the banner. Explain what the selected range was really about.
 - `opening`
-  This is the editorial entry for a reader who did not read the chat.
+  This is the lead paragraph for a reader who did not read the chat.
 - `period_in_one_line`
   A compact judgment for the chosen range.
 - `main_threads`
-  Usually 4-6 items is enough.
+  Usually 4-6 items is enough. Think "版面主线", not "feature checklist".
 - `people`
   Use observed roles, not praise.
 - `timeline`
-  Reflect the actual rhythm across the selected dates.
+  Reflect the actual rhythm across the selected dates, like a newsroom daybook.
 - `quotes`
   Keep them short, precise, and attributable.
 - `links`
@@ -84,3 +86,5 @@
 - If the selected range is fragmented, say it is fragmented.
 - If the group was mostly resource sharing, say that plainly.
 - Keep this JSON aligned with `analysis.json`, not with wishful narrative.
+- Prefer editorial language over product-copy language.
+- On quiet days, write a restrained "静版" explanation instead of pretending there was a full news cycle.

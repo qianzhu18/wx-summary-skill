@@ -12,7 +12,7 @@ from typing import Any
 
 MAX_RECENT_GROUPS = 8
 DEFAULT_TEXT_STYLE = "growth-brief-v1"
-DEFAULT_WEB_STYLE = "daily-report-v1"
+DEFAULT_WEB_STYLE = "people-daily-v1"
 DEFAULT_WX_BIN = "wx"
 
 
@@ -265,11 +265,11 @@ def inspect_payload(project_root: Path) -> dict[str, Any]:
         ],
         "summary_modes": [
             {"id": "text", "label": "文字总结"},
-            {"id": "webpage", "label": "网页信息报"},
+            {"id": "webpage", "label": "网页日报（报纸风）"},
         ],
         "style_options": {
             "text": [{"id": DEFAULT_TEXT_STYLE, "label": "默认文字总结样式"}],
-            "webpage": [{"id": DEFAULT_WEB_STYLE, "label": "默认网页信息报样式"}],
+            "webpage": [{"id": DEFAULT_WEB_STYLE, "label": "默认人民日报式网页日报样式"}],
         },
     }
     return payload
