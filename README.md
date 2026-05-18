@@ -1,8 +1,8 @@
 # wx-summary-skill
 
-An interactive WeChat group summary skill for Codex / Claude-style agent workflows.
+An interactive WeChat group digest skill for Codex / Claude-style agent workflows.
 
-It wraps `wx-cli` chat extraction into a reusable flow:
+It turns one-off WeChat summary prompts into a reusable local flow:
 
 1. pick a saved recent group or choose `Other`
 2. choose a time preset or custom date range
@@ -12,19 +12,34 @@ It wraps `wx-cli` chat extraction into a reusable flow:
 
 This repository focuses on extraction, analysis, and local rendering. It intentionally does **not** include deployment.
 
+## Real usage example
+
+This screenshot is a real run from the skill, hosted through the same O-Publish + Cloudflare R2 image workflow used in the author's WeChat publishing pipeline.
+
+![wx-summary-skill real usage example](https://img.qianzhu.online/skills/wx-summary-skill/readme/wx-summary-skill-usage-example-2026-05-18.png)
+
+Example reply:
+
+```text
+【1】AI产品蝗虫团，7d,text
+```
+
+The source file used for this README example is kept in [docs/assets/wx-summary-skill-usage-example-2026-05-18.png](docs/assets/wx-summary-skill-usage-example-2026-05-18.png).
+
 ## Why this exists
 
-Most WeChat summary prompts are one-off and forget everything about the last run.
+Most WeChat summary prompts forget everything about the previous run.
 
-`wx-summary-skill` turns that into a reusable experience:
+`wx-summary-skill` keeps a small amount of reusable state:
 
 - remembers recent groups
 - remembers preferred time preset and output mode
-- reuses existing baoyu / `wx-cli` identity config when available
+- reuses existing baoyu defaults when available
+- still works without baoyu through repo-native config
 - supports both a structured markdown digest and a local HTML digest
 - keeps the workflow local and inspectable
 
-## Features
+## What this repo does
 
 - interactive group selection
 - recent-group memory with `Other` fallback
@@ -35,91 +50,166 @@ Most WeChat summary prompts are one-off and forget everything about the last run
 - reusable local state
 - real-message analysis bundle with stats, quotes, link titles, and activity patterns
 
-## Repository layout
+## What this repo does not do
 
-```text
-.
-├── SKILL.md
-├── agents/
-│   └── openai.yaml
-├── references/
-│   ├── summary-schema.md
-│   ├── text-summary-format.md
-│   └── webpage-mode.md
-└── scripts/
-    ├── prepare_wechat_digest.py
-    ├── render_web_digest.py
-    ├── resolve_time_range.py
-    └── skill_state.py
-```
+- it does not fetch WeChat data by itself without `wx-cli`
+- it does not require `baoyu-wechat-summary`, but it can reuse baoyu config when present
+- it does not deploy HTML output
 
-## Prerequisites
+## Install the skill
 
-You need:
-
-- Python 3
-- [`wx-cli`](https://github.com/jackwener/wx-cli) available as `wx`
-- WeChat running and readable by `wx-cli`
-
-Quick checks:
+Clone directly into your Codex skills directory:
 
 ```bash
-wx --version
-wx sessions --json
+git clone https://github.com/qianzhu18/wx-summary-skill.git "$HOME/.codex/skills/wx-summary-skill"
 ```
 
-If those do not work, fix your `wx-cli` / WeChat environment first.
-
-## Installation
-
-Install this repository into your preferred local skills directory, or symlink it there.
-
-Typical flow:
-
-```bash
-git clone https://github.com/qianzhu18/wx-summary-skill.git
-```
-
-Then place or link the folder into the skill directory used by your agent runtime.
-
-Once installed, invoke it with:
+Then invoke it with:
 
 ```text
 $wx-summary-skill
 ```
 
-## Shared configuration
+If you prefer another local skill directory, clone or symlink this repo there instead.
 
-This skill reads two layers of local config:
+## Start from zero: no baoyu, no wx-cli
 
-1. baoyu-style WeChat preferences, when available
-2. its own local state for recent groups and defaults
+This is the missing path that confused earlier versions of the repo.
 
-### Reused baoyu config
+`wx-summary-skill` only needs [`wx-cli`](https://github.com/jackwener/wx-cli) plus a readable WeChat session. `baoyu-wechat-summary` is optional.
 
-If one of these exists, the skill will reuse it:
+### 1. Install `wx-cli`
+
+Official upstream repo:
+
+- [jackwener/wx-cli](https://github.com/jackwener/wx-cli)
+
+Choose one install path:
+
+```bash
+npm install -g @jackwener/wx-cli
+```
+
+or:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jackwener/wx-cli/main/install.sh | bash
+```
+
+If you also want the upstream `wx-cli` skill itself for your agent runtime:
+
+```bash
+npx skills add jackwener/wx-cli -g
+```
+
+### 2. Initialize `wx-cli` on macOS
+
+Follow the upstream macOS flow before using this repo:
+
+```bash
+sudo codesign --force --deep --sign - /Applications/WeChat.app
+open -a WeChat
+sudo wx init
+wx sessions --json
+```
+
+Notes:
+
+- if your WeChat app is not under `/Applications/WeChat.app`, replace the path
+- `wx sessions --json` should return real JSON before you continue
+- if it fails, rerun the exact failing command first before blaming the summary layer
+
+### 3. Run the built-in doctor
+
+This repo now includes an environment check script:
+
+```bash
+cd "$HOME/.codex/skills/wx-summary-skill"
+python3 scripts/check_wechat_env.py
+```
+
+The doctor checks:
+
+- whether `wx` is in `PATH`
+- whether `wx --version` works
+- whether `wx sessions --json` is readable
+- whether this repo already has a local config
+- where the default data root will be written
+
+If the doctor reports `action-needed`, it prints the next commands to run.
+
+### 4. Save repo-native config
+
+If you are **not** reusing baoyu defaults, initialize local config once:
+
+```bash
+python3 scripts/skill_state.py init-config --scope project --data-root ./wechat
+```
+
+If you want one config shared across multiple projects:
+
+```bash
+python3 scripts/skill_state.py init-config --scope xdg --data-root ~/wechat-data
+```
+
+### 5. Start the skill
+
+Once `python3 scripts/check_wechat_env.py` returns `ready`, run:
+
+```text
+$wx-summary-skill
+```
+
+## Already have baoyu / wx-cli
+
+If you already use `baoyu-wechat-summary` or a working `wx-cli` setup, the repo will reuse that config automatically when one of these exists:
 
 - `.baoyu-skills/baoyu-wechat-summary/EXTEND.md` relative to the project root
 - `${XDG_CONFIG_HOME:-$HOME/.config}/baoyu-skills/baoyu-wechat-summary/EXTEND.md`
 - `$HOME/.baoyu-skills/baoyu-wechat-summary/EXTEND.md`
 
-Useful keys:
+Useful reused keys:
 
 - `self_wxid`
 - `self_display`
 - `data_root`
 
-### Skill state
+## Repo-native config and state
 
-State is stored in one of:
+This repo now has its own config layer, so it no longer depends on baoyu to be useful.
 
-- project scope: `<project>/.wx-summary-skill/state.json`
-- XDG scope: `${XDG_CONFIG_HOME:-$HOME/.config}/wx-summary-skill/state.json`
-- home scope: `$HOME/.wx-summary-skill/state.json`
+### Config
 
-The default write scope is `project`.
+Config is read from the first existing file in this order:
 
-Inspect current merged state:
+- `<project>/.wx-summary-skill/config.json`
+- `${XDG_CONFIG_HOME:-$HOME/.config}/wx-summary-skill/config.json`
+- `$HOME/.wx-summary-skill/config.json`
+
+Supported keys:
+
+- `data_root`
+- `self_wxid` (optional)
+- `self_display` (optional)
+- `wx_bin` (optional, default: `wx`)
+
+### State
+
+State is read from the first existing file in this order:
+
+- `<project>/.wx-summary-skill/state.json`
+- `${XDG_CONFIG_HOME:-$HOME/.config}/wx-summary-skill/state.json`
+- `$HOME/.wx-summary-skill/state.json`
+
+State stores:
+
+- recent groups
+- default time preset
+- default summary mode
+- default text style
+- default webpage style
+
+Inspect the merged view any time:
 
 ```bash
 python3 scripts/skill_state.py inspect
@@ -138,9 +228,21 @@ python3 scripts/skill_state.py save-session \
   --web-style daily-report-v1
 ```
 
-## Time range resolution
+## Typical workflow
 
-Preset ranges resolve to absolute dates with:
+### 1. Check the environment
+
+```bash
+python3 scripts/check_wechat_env.py
+```
+
+### 2. Inspect state
+
+```bash
+python3 scripts/skill_state.py inspect
+```
+
+### 3. Resolve the range
 
 ```bash
 python3 scripts/resolve_time_range.py --preset 7d
@@ -152,11 +254,23 @@ Custom dates:
 python3 scripts/resolve_time_range.py --since 2026-05-11 --until 2026-05-17
 ```
 
-## Output modes
+### 4. Build the analysis bundle
 
-### 1. Text summary
+```bash
+python3 scripts/prepare_wechat_digest.py \
+  --chat "Christina的AI+ 知识圈" \
+  --since 2026-05-11 \
+  --until 2026-05-17 \
+  --data-root "./wechat"
+```
 
-The text mode is designed for actionable reading and personal growth review.
+### 5A. Produce a text summary
+
+Read the generated briefing and raw evidence as needed, then write:
+
+```text
+<group_dir>/2026-05-11_2026-05-17.text-summary.md
+```
 
 Expected section structure:
 
@@ -167,58 +281,9 @@ Expected section structure:
 - `活跃之星`
 - `词云`
 
-See:
+See [references/text-summary-format.md](references/text-summary-format.md).
 
-- [references/text-summary-format.md](references/text-summary-format.md)
-
-### 2. Webpage mode
-
-The webpage mode creates a local static digest site.
-
-It uses:
-
-- a reviewed `summary.json`
-- an `analysis.json`
-- the renderer in `scripts/render_web_digest.py`
-
-See:
-
-- [references/summary-schema.md](references/summary-schema.md)
-- [references/webpage-mode.md](references/webpage-mode.md)
-
-## Typical workflow
-
-### 1. Inspect state
-
-```bash
-python3 scripts/skill_state.py inspect
-```
-
-### 2. Resolve the range
-
-```bash
-python3 scripts/resolve_time_range.py --preset 7d
-```
-
-### 3. Build the analysis bundle
-
-```bash
-python3 scripts/prepare_wechat_digest.py \
-  --chat "Christina的AI+ 知识圈" \
-  --since 2026-05-11 \
-  --until 2026-05-17 \
-  --data-root "./wechat"
-```
-
-### 4A. Produce a text summary
-
-Read the generated briefing and raw evidence as needed, then write:
-
-```text
-<group_dir>/2026-05-11_2026-05-17.text-summary.md
-```
-
-### 4B. Produce a local web digest
+### 5B. Produce a local web digest
 
 ```bash
 python3 scripts/render_web_digest.py \
@@ -226,11 +291,10 @@ python3 scripts/render_web_digest.py \
   --analysis /abs/path/to/analysis.json
 ```
 
-This writes local artifacts such as:
+See:
 
-- `<group_dir>/site/index.html`
-- `<group_dir>/dist/index.html`
-- `<group_dir>/history.json`
+- [references/summary-schema.md](references/summary-schema.md)
+- [references/webpage-mode.md](references/webpage-mode.md)
 
 ## What gets generated
 
@@ -241,39 +305,36 @@ This writes local artifacts such as:
 - `analysis/*.analysis.json`
 - `analysis/*.briefing.md`
 
-`render_web_digest.py` additionally creates:
+`render_web_digest.py` writes local artifacts such as:
 
 - `<group_dir>/<since>_<until>.web.md`
-- `<group_dir>/summary.json`
 - `<group_dir>/site/index.html`
 - `<group_dir>/dist/index.html`
 - `<group_dir>/history.json`
-- `<group_dir>/history-digests.jsonl`
 
-## Design notes
+## Repository layout
 
-- The skill prefers structured local state over one-off prompting.
-- The analysis bundle is the default reading surface; raw messages are only opened when necessary.
-- Deployment is intentionally excluded so the repository stays focused on reusable summarization.
-
-## Development
-
-Quick local checks:
-
-```bash
-python3 -m py_compile scripts/*.py
-```
-
-If you have the Codex `skill-creator` validator available locally, also run:
-
-```bash
-python3 path/to/quick_validate.py .
-```
-
-If you do not have that validator locally, the core minimum is:
-
-```bash
-python3 -m py_compile scripts/*.py
+```text
+.
+├── SKILL.md
+├── LICENSE
+├── README.md
+├── agents/
+│   └── openai.yaml
+├── docs/
+│   └── assets/
+│       └── wx-summary-skill-usage-example-2026-05-18.png
+├── references/
+│   ├── setup-without-baoyu.md
+│   ├── summary-schema.md
+│   ├── text-summary-format.md
+│   └── webpage-mode.md
+└── scripts/
+    ├── check_wechat_env.py
+    ├── prepare_wechat_digest.py
+    ├── render_web_digest.py
+    ├── resolve_time_range.py
+    └── skill_state.py
 ```
 
 ## License

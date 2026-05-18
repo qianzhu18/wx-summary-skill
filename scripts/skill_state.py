@@ -13,6 +13,7 @@ from typing import Any
 MAX_RECENT_GROUPS = 8
 DEFAULT_TEXT_STYLE = "growth-brief-v1"
 DEFAULT_WEB_STYLE = "daily-report-v1"
+DEFAULT_WX_BIN = "wx"
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,6 +36,16 @@ def parse_args() -> argparse.Namespace:
     save_parser.add_argument("--text-style")
     save_parser.add_argument("--web-style")
     save_parser.add_argument("--data-root")
+
+    config_parser = subparsers.add_parser(
+        "init-config",
+        help="Create or update repo-native config for users who do not use baoyu defaults.",
+    )
+    config_parser.add_argument("--scope", choices=["project", "xdg", "home"], default="project")
+    config_parser.add_argument("--data-root")
+    config_parser.add_argument("--self-wxid")
+    config_parser.add_argument("--self-display")
+    config_parser.add_argument("--wx-bin")
     return parser.parse_args()
 
 
@@ -55,6 +66,14 @@ def write_targets(project_root: Path) -> dict[str, Path]:
         "project": project_root / ".wx-summary-skill" / "state.json",
         "xdg": xdg_config_home() / "wx-summary-skill" / "state.json",
         "home": Path.home().resolve() / ".wx-summary-skill" / "state.json",
+    }
+
+
+def config_targets(project_root: Path) -> dict[str, Path]:
+    return {
+        "project": project_root / ".wx-summary-skill" / "config.json",
+        "xdg": xdg_config_home() / "wx-summary-skill" / "config.json",
+        "home": Path.home().resolve() / ".wx-summary-skill" / "config.json",
     }
 
 
@@ -82,6 +101,13 @@ def load_simple_kv(path: Path) -> dict[str, str]:
     return data
 
 
+def load_json_object(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise SystemExit(f"expected JSON object in {path}")
+    return payload
+
+
 def load_baoyu_defaults(project_root: Path) -> tuple[dict[str, Any], str | None]:
     for candidate in baoyu_extend_candidates(project_root):
         if candidate.exists():
@@ -97,13 +123,34 @@ def load_baoyu_defaults(project_root: Path) -> tuple[dict[str, Any], str | None]
     return ({}, None)
 
 
-def default_state(project_root: Path, baoyu_defaults: dict[str, Any]) -> dict[str, Any]:
+def normalize_skill_config(data: Any) -> dict[str, str]:
+    if not isinstance(data, dict):
+        return {}
+    normalized: dict[str, str] = {}
+    for key in ["self_wxid", "self_display", "data_root", "wx_bin"]:
+        value = data.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            normalized[key] = text
+    return normalized
+
+
+def load_skill_config(project_root: Path) -> tuple[dict[str, str], str | None]:
+    for candidate in config_targets(project_root).values():
+        if candidate.exists():
+            return normalize_skill_config(load_json_object(candidate)), str(candidate)
+    return ({}, None)
+
+
+def default_state(project_root: Path, skill_defaults: dict[str, Any]) -> dict[str, Any]:
     return {
         "default_duration_preset": "1d",
         "default_summary_mode": "text",
         "default_text_style": DEFAULT_TEXT_STYLE,
         "default_web_style": DEFAULT_WEB_STYLE,
-        "default_data_root": baoyu_defaults.get("data_root") or str(project_root / "wechat"),
+        "default_data_root": skill_defaults.get("data_root") or str(project_root / "wechat"),
         "recent_groups": [],
     }
 
@@ -111,7 +158,7 @@ def default_state(project_root: Path, baoyu_defaults: dict[str, Any]) -> dict[st
 def load_existing_state(project_root: Path) -> tuple[dict[str, Any], str | None]:
     for candidate in write_targets(project_root).values():
         if candidate.exists():
-            data = json.loads(candidate.read_text(encoding="utf-8"))
+            data = load_json_object(candidate)
             return data, str(candidate)
     return ({}, None)
 
@@ -142,8 +189,15 @@ def normalize_recent_groups(items: Any) -> list[dict[str, Any]]:
 
 def merge_state(project_root: Path) -> dict[str, Any]:
     baoyu_defaults, baoyu_path = load_baoyu_defaults(project_root)
+    skill_config, skill_config_path = load_skill_config(project_root)
+    merged_defaults = {
+        "self_wxid": skill_config.get("self_wxid") or baoyu_defaults.get("self_wxid"),
+        "self_display": skill_config.get("self_display") or baoyu_defaults.get("self_display"),
+        "data_root": skill_config.get("data_root") or baoyu_defaults.get("data_root"),
+        "wx_bin": skill_config.get("wx_bin") or DEFAULT_WX_BIN,
+    }
     existing_state, state_path = load_existing_state(project_root)
-    merged = default_state(project_root, baoyu_defaults)
+    merged = default_state(project_root, merged_defaults)
     merged.update(
         {
             "default_duration_preset": existing_state.get(
@@ -169,8 +223,13 @@ def merge_state(project_root: Path) -> dict[str, Any]:
         "state_path": state_path,
         "state_exists": bool(state_path),
         "write_targets": {key: str(value) for key, value in write_targets(project_root).items()},
+        "config_path": skill_config_path,
+        "config_exists": bool(skill_config_path),
+        "config_targets": {key: str(value) for key, value in config_targets(project_root).items()},
+        "skill_config": skill_config,
         "baoyu_extend_path": baoyu_path,
         "baoyu_defaults": baoyu_defaults,
+        "resolved_defaults": merged_defaults,
         "state": merged,
     }
 
@@ -266,6 +325,30 @@ def save_session(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def init_config(args: argparse.Namespace) -> dict[str, Any]:
+    project_root = project_root_from(args.project_root)
+    merged = merge_state(project_root)
+    config = {
+        **merged["skill_config"],
+        **{
+            "data_root": args.data_root or merged["resolved_defaults"].get("data_root") or str(project_root / "wechat"),
+            "wx_bin": args.wx_bin or merged["resolved_defaults"].get("wx_bin") or DEFAULT_WX_BIN,
+        },
+    }
+    if args.self_wxid:
+        config["self_wxid"] = args.self_wxid.strip()
+    if args.self_display:
+        config["self_display"] = args.self_display.strip()
+
+    target = config_targets(project_root)[args.scope]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "saved_to": str(target),
+        "config": config,
+    }
+
+
 def main() -> None:
     args = parse_args()
     project_root = project_root_from(args.project_root)
@@ -274,6 +357,9 @@ def main() -> None:
         return
     if args.command == "save-session":
         print(json.dumps(save_session(args), ensure_ascii=False, indent=2))
+        return
+    if args.command == "init-config":
+        print(json.dumps(init_config(args), ensure_ascii=False, indent=2))
         return
     raise SystemExit(f"unknown command: {args.command}")
 

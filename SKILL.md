@@ -5,9 +5,6 @@ license: MIT
 metadata:
   openclaw:
     homepage: https://github.com/qianzhu18/wx-summary-skill
-    requires:
-      anyBins:
-        - wx
 ---
 
 # WeChat Summary Skill
@@ -37,20 +34,24 @@ When asking the user for choices:
 Before doing anything else, verify these in order:
 
 ```bash
-wx --version
-wx sessions --json
+python3 scripts/check_wechat_env.py
 ```
 
-If either fails, stop and tell the user the exact failing command.
+If the doctor fails:
 
-This skill assumes the user has already completed the baoyu / wx-cli setup. Reuse existing baoyu preferences when available instead of inventing new identity settings.
+1. tell the user the exact failing command
+2. read [references/setup-without-baoyu.md](references/setup-without-baoyu.md)
+3. guide them through upstream `wx-cli` install / init before continuing
+
+This skill should reuse existing baoyu preferences when available, but it must also work without baoyu by using repo-native config.
 
 ## Shared Config
 
 This skill reads two layers of local configuration:
 
-1. **baoyu preferences** for `self_wxid`, `self_display`, and optional `data_root`
-2. **skill state** for recent groups and preferred output presets
+1. **repo-native config** for `data_root`, optional `self_wxid`, `self_display`, and optional `wx_bin`
+2. **baoyu preferences** for `self_wxid`, `self_display`, and optional `data_root`
+3. **skill state** for recent groups and preferred output presets
 
 Load the skill state first:
 
@@ -66,6 +67,12 @@ That command returns:
 - default summary mode
 - default text/web styles
 - default data root
+
+If there is no repo-native config and no baoyu config yet, initialize one:
+
+```bash
+python3 scripts/skill_state.py init-config --scope project --data-root ./wechat
+```
 
 Use the returned `recent_group_choices` as the first question. If there are no saved groups yet, the list should effectively be `Other`.
 

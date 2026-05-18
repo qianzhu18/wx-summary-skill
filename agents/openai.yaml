@@ -1,4 +1,4 @@
 interface:
   display_name: "WeChat Summary Skill"
-  short_description: "交互式提取微信群聊并生成文字摘要或网页信息报"
-  default_prompt: "Use $wx-summary-skill to choose a WeChat group, pick a time preset, save the session defaults, and generate either a structured text digest or a local web digest without deployment."
+  short_description: "交互式提取微信群聊，缺少 wx-cli / baoyu 时也可先做环境检查和初始化"
+  default_prompt: "Use $wx-summary-skill to choose a WeChat group, pick a time preset, save the session defaults, and generate either a structured text digest or a local web digest. If wx-cli is not ready yet, run the built-in doctor/setup path first."
