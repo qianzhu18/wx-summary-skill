@@ -14,17 +14,21 @@ This repository focuses on extraction, analysis, and local rendering. It intenti
 
 ## Real usage example
 
-This screenshot is a real run from the skill, hosted through the same O-Publish + Cloudflare R2 image workflow used in the author's WeChat publishing pipeline.
+The README case is now aligned to the author's own group workflow:
 
-![wx-summary-skill real usage example](https://img.qianzhu.online/skills/wx-summary-skill/readme/wx-summary-skill-usage-example-2026-05-18.png)
+- group: `IGN AI | 洋来`
+- range: `7d`
+- mode: `text`
+
+The screenshot for this case will be refreshed after a new run, so the README does not temporarily show a mismatched group image.
 
 Example reply:
 
 ```text
-【1】AI产品蝗虫团，7d,text
+IGN AI | 洋来，7d，text
 ```
 
-The source file used for this README example is kept in [docs/assets/wx-summary-skill-usage-example-2026-05-18.png](docs/assets/wx-summary-skill-usage-example-2026-05-18.png).
+The previous screenshot asset is still kept in [docs/assets/wx-summary-skill-usage-example-2026-05-18.png](docs/assets/wx-summary-skill-usage-example-2026-05-18.png) until the new `IGN AI | 洋来` example screenshot replaces it.
 
 ## Why this exists
 
