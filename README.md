@@ -53,7 +53,7 @@ wx sessions --json
 
 ## 实际效果
 
-下面这张图来自真实运行截图：
+下面这张图来自真实运行截图，展示的是 skill 交互输入效果：
 
 ![wx-summary-skill real usage example](https://img.qianzhu.online/skills/wx-summary-skill/readme/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png)
 
@@ -70,6 +70,14 @@ IGN AI | 洋来，7d，text
 ```
 
 源文件保存在 [docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png](docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png)。
+
+下面这张图展示的是同一组数据生成出来的网页周报效果。点击图片可以打开在线预览：
+
+[![IGN AI weekly webpage preview](docs/assets/wx-summary-skill-ign-ai-yanglai-webpage-example-2026-05-18.png)](https://ba40cc13.pinme.dev/)
+
+在线预览：
+
+- <https://ba40cc13.pinme.dev/>
 
 ## 快速开始
 
@@ -403,6 +411,7 @@ python3 scripts/render_web_digest.py \
 ├── docs/
 │   └── assets/
 │       ├── wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png
+│       ├── wx-summary-skill-ign-ai-yanglai-webpage-example-2026-05-18.png
 │       └── wx-summary-skill-usage-example-2026-05-18.png
 ├── .github/
 │   └── workflows/
