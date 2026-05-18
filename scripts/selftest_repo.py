@@ -38,6 +38,17 @@ def write_project_config(project_root: Path, wx_bin: str, data_root: str = "./we
     return config_path
 
 
+def write_upstream_wx_cli_config(home_dir: Path, db_dir: Path, keys_file: str = "all_keys.json") -> Path:
+    cli_dir = home_dir / ".wx-cli"
+    cli_dir.mkdir(parents=True, exist_ok=True)
+    config_path = cli_dir / "config.json"
+    config_path.write_text(
+        json.dumps({"db_dir": str(db_dir), "keys_file": keys_file}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return config_path
+
+
 def write_mock_wx(bin_dir: Path, mode: str) -> str:
     impl = bin_dir / "wx_mock_impl.py"
     impl.write_text(
@@ -159,11 +170,71 @@ def test_bootstrap_creates_config_when_missing() -> None:
         assert_true(report["ready"] is False, "Bootstrap should stay non-ready when wx is missing")
 
 
+def test_windows_last_mile_diagnostics() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        wx_bin = write_mock_wx(bin_dir, "fail")
+        write_project_config(root, wx_bin)
+
+        home_dir = root / "home"
+        home_dir.mkdir()
+        appdata_dir = root / "appdata"
+        ini_dir = appdata_dir / "Tencent" / "xwechat" / "config"
+        ini_dir.mkdir(parents=True, exist_ok=True)
+
+        configured_db_dir = root / "manual-data" / "xwechat_files" / "wxid_manual" / "db_storage"
+        configured_db_dir.mkdir(parents=True, exist_ok=True)
+        (configured_db_dir / "session.db").write_bytes(b"sqlite")
+        write_upstream_wx_cli_config(home_dir, configured_db_dir)
+
+        detected_root = root / "migrated-data"
+        detected_db_dir = detected_root / "xwechat_files" / "wxid_detected" / "db_storage"
+        detected_db_dir.mkdir(parents=True, exist_ok=True)
+        (detected_db_dir / "message_0.db").write_bytes(b"sqlite")
+        (ini_dir / "account.ini").write_text(str(detected_root) + "\n", encoding="utf-8")
+
+        original_path = os.environ.get("PATH", "")
+        original_home = os.environ.get("HOME")
+        original_appdata = os.environ.get("APPDATA")
+        os.environ["PATH"] = str(bin_dir) + os.pathsep + original_path
+        os.environ["HOME"] = str(home_dir)
+        os.environ["APPDATA"] = str(appdata_dir)
+        try:
+            report = build_report(root, "win32")
+        finally:
+            os.environ["PATH"] = original_path
+            if original_home is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = original_home
+            if original_appdata is None:
+                os.environ.pop("APPDATA", None)
+            else:
+                os.environ["APPDATA"] = original_appdata
+
+        codes = {item["code"] for item in report["diagnostics"]}
+        assert_true(
+            "windows_wx_init_reautodetects_before_keys" in codes,
+            "Windows doctor should explain wx init re-autodetect behavior when keys are missing",
+        )
+        assert_true(
+            "windows_configured_db_dir_outside_autodetect" in codes,
+            "Windows doctor should flag configured db_dir values that are outside auto-detect candidates",
+        )
+        assert_true(
+            any(step["title"] == "Inspect WeChat data-root hints" for step in report["next_steps"]),
+            "Windows doctor should suggest checking %APPDATA% xwechat ini hints",
+        )
+
+
 def main() -> None:
     test_script_compilation()
     test_missing_wx_install_steps()
     test_platform_specific_recovery_steps()
     test_bootstrap_creates_config_when_missing()
+    test_windows_last_mile_diagnostics()
     print("selftest_repo.py: all checks passed")
 
 

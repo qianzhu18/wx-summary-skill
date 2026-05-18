@@ -120,6 +120,8 @@ Windows PowerShell:
 py -3 scripts/check_wechat_env.py
 ```
 
+The doctor now also inspects upstream `~/.wx-cli/config.json`, `all_keys.json`, and on Windows it will call out the common "db_dir is real but wx init still re-runs auto-detect before keys exist" last-mile failure.
+
 ## 6. Start the skill
 
 When the doctor returns `ready`, you can call:

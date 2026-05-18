@@ -253,6 +253,9 @@ doctor 会检查：
 - `wx` 是否在 `PATH`
 - `wx --version` 是否正常
 - `wx sessions --json` 是否可读
+- `~/.wx-cli/config.json` 和 `all_keys.json` 是否已经到位
+- Windows 下 `%APPDATA%\Tencent\xwechat\config\*.ini` 能否推出真实 `db_storage`
+- Windows 下是否落进了“手动写了 `db_dir`，但 `wx init` 仍在生成 `all_keys.json` 之前重跑自动探测”的已知卡点
 - 当前 repo 是否已有本地配置
 - 默认输出目录会写到哪里
 
