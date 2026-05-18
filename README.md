@@ -70,13 +70,42 @@ Clone directly into your Codex skills directory:
 git clone https://github.com/qianzhu18/wx-summary-skill.git "$HOME/.codex/skills/wx-summary-skill"
 ```
 
-Then invoke it with:
+After bootstrap returns `ready`, invoke it with:
 
 ```text
 $wx-summary-skill
 ```
 
 If you prefer another local skill directory, clone or symlink this repo there instead.
+
+## Quickstart
+
+If you want the shortest path from a GitHub clone to a usable local setup, run the bootstrap script right after cloning.
+
+macOS / Linux:
+
+```bash
+git clone https://github.com/qianzhu18/wx-summary-skill.git "$HOME/.codex/skills/wx-summary-skill"
+cd "$HOME/.codex/skills/wx-summary-skill"
+python3 scripts/bootstrap_skill.py
+```
+
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/qianzhu18/wx-summary-skill.git "$HOME\.codex\skills\wx-summary-skill"
+Set-Location "$HOME\.codex\skills\wx-summary-skill"
+py -3 scripts/bootstrap_skill.py
+```
+
+The bootstrap script:
+
+- creates repo-native config automatically when it is missing
+- detects whether baoyu config is already reusable
+- runs the built-in doctor
+- prints the exact next commands for your platform
+- exits `ready` only when the machine can already read WeChat sessions
+- leaves you with a repo that can be used directly from the GitHub clone path
 
 ## Platform support
 
@@ -92,7 +121,7 @@ This repo follows that same platform model. The only important command differenc
 - Windows PowerShell: use `py -3`
 - if your machine exposes only `python` for Python 3, use that instead
 
-The built-in doctor is platform-aware and prints platform-specific next steps.
+The built-in doctor and bootstrap path are both platform-aware and print platform-specific next steps.
 
 ## Start from zero: no baoyu, no wx-cli
 
@@ -162,7 +191,27 @@ Notes:
 - `wx sessions --json` should return real JSON before you continue
 - if it fails, rerun the exact failing command first before blaming the summary layer
 
-### 3. Run the built-in doctor
+### 3. Run the bootstrap path
+
+The fastest path for direct GitHub users is:
+
+macOS / Linux:
+
+```bash
+cd "$HOME/.codex/skills/wx-summary-skill"
+python3 scripts/bootstrap_skill.py
+```
+
+Windows PowerShell:
+
+```powershell
+Set-Location "$HOME\.codex\skills\wx-summary-skill"
+py -3 scripts/bootstrap_skill.py
+```
+
+This bootstrap command will initialize repo-native config when needed, then run the doctor for you.
+
+### 4. Run the built-in doctor
 
 This repo now includes an environment check script:
 
@@ -190,9 +239,9 @@ The doctor checks:
 
 If the doctor reports `action-needed`, it prints the next commands to run.
 
-### 4. Save repo-native config
+### 5. Optional: save repo-native config manually
 
-If you are **not** reusing baoyu defaults, initialize local config once:
+If you want to override what bootstrap would write, or if you prefer a shared config scope, initialize local config manually:
 
 ```bash
 python3 scripts/skill_state.py init-config --scope project --data-root ./wechat
@@ -210,7 +259,7 @@ If you want one config shared across multiple projects:
 python3 scripts/skill_state.py init-config --scope xdg --data-root ~/wechat-data
 ```
 
-### 5. Start the skill
+### 6. Start the skill
 
 Once the doctor returns `ready`, run:
 
@@ -291,6 +340,12 @@ python3 scripts/skill_state.py save-session \
 Below, the examples use the macOS / Linux launcher form. On Windows, replace `python3` with `py -3`.
 
 ### 1. Check the environment
+
+```bash
+python3 scripts/bootstrap_skill.py
+```
+
+Or run the lower-level doctor directly:
 
 ```bash
 python3 scripts/check_wechat_env.py
@@ -383,19 +438,35 @@ See:
 │   └── openai.yaml
 ├── docs/
 │   └── assets/
+│       ├── wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png
 │       └── wx-summary-skill-usage-example-2026-05-18.png
+├── .github/
+│   └── workflows/
+│       └── selftest.yml
 ├── references/
 │   ├── setup-without-baoyu.md
 │   ├── summary-schema.md
 │   ├── text-summary-format.md
 │   └── webpage-mode.md
 └── scripts/
+    ├── bootstrap_skill.py
     ├── check_wechat_env.py
     ├── prepare_wechat_digest.py
     ├── render_web_digest.py
     ├── resolve_time_range.py
+    ├── selftest_repo.py
     └── skill_state.py
 ```
+
+## Selftest
+
+Run the repository smoke test locally with:
+
+```bash
+python3 scripts/selftest_repo.py
+```
+
+It validates the bootstrap path plus the platform-specific doctor branches. The same smoke test runs in GitHub Actions on macOS, Linux, and Windows.
 
 ## License
 

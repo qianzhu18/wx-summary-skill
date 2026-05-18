@@ -40,6 +40,15 @@ When running the bundled Python scripts below:
 Before doing anything else, verify these in order:
 
 ```bash
+python3 scripts/bootstrap_skill.py
+python3 scripts/check_wechat_env.py
+```
+
+If the repo was just cloned and has no local config yet, `bootstrap_skill.py` may create it for the user before the doctor runs.
+
+For users who want the lower-level check only:
+
+```bash
 python3 scripts/check_wechat_env.py
 ```
 
