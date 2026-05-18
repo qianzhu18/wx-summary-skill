@@ -19,6 +19,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--project-root", default=".")
     parser.add_argument("--json", action="store_true", help="Print JSON instead of human text.")
+    parser.add_argument(
+        "--platform",
+        help="Override detected platform for smoke tests or docs validation (darwin/linux/win32).",
+    )
     return parser.parse_args()
 
 
@@ -37,16 +41,169 @@ def step(title: str, command: str, why: str) -> dict[str, str]:
     return {"title": title, "command": command, "why": why}
 
 
-def build_report(project_root: Path) -> dict[str, Any]:
+def normalized_platform(raw_platform: str | None) -> str:
+    platform_id = raw_platform or sys.platform
+    if platform_id.startswith("linux"):
+        return "linux"
+    if platform_id.startswith("win") or platform_id in {"cygwin", "msys"}:
+        return "win32"
+    if platform_id == "darwin":
+        return "darwin"
+    return platform_id
+
+
+def platform_label(platform_id: str) -> str:
+    return {
+        "darwin": "macOS",
+        "linux": "Linux",
+        "win32": "Windows",
+    }.get(platform_id, platform_id)
+
+
+def python_command(platform_id: str) -> str:
+    if platform_id == "win32":
+        return "py -3"
+    return "python3"
+
+
+def config_init_command(platform_id: str) -> str:
+    data_root = ".\\wechat" if platform_id == "win32" else "./wechat"
+    return (
+        f"{python_command(platform_id)} scripts/skill_state.py init-config "
+        f"--scope project --data-root {data_root}"
+    )
+
+
+def install_steps_for_missing_wx(platform_id: str) -> list[dict[str, str]]:
+    steps = [
+        step(
+            "Install wx-cli with npm",
+            "npm install -g @jackwener/wx-cli",
+            "Official all-platform install path when you already have Node.js / npm.",
+        )
+    ]
+    if platform_id in {"darwin", "linux"}:
+        steps.append(
+            step(
+                "Install wx-cli with the official shell script",
+                "curl -fsSL https://raw.githubusercontent.com/jackwener/wx-cli/main/install.sh | bash",
+                "Official one-line installer for macOS / Linux.",
+            )
+        )
+    elif platform_id == "win32":
+        steps.append(
+            step(
+                "Install wx-cli with the official PowerShell script",
+                "irm https://raw.githubusercontent.com/jackwener/wx-cli/main/install.ps1 | iex",
+                "Official Windows install path. Run it in an Administrator PowerShell window.",
+            )
+        )
+    steps.append(
+        step(
+            "Optional: add the upstream wx-cli skill",
+            "npx skills add jackwener/wx-cli -g",
+            "Useful if you also want a standalone skill around wx-cli itself.",
+        )
+    )
+    return steps
+
+
+def recovery_steps_for_unreadable_sessions(platform_id: str, wx_bin: str) -> list[dict[str, str]]:
+    wx_init_command = f"sudo {wx_bin} init" if platform_id in {"darwin", "linux"} else f"{wx_bin} init"
+    verify_command = f"{wx_bin} sessions --json"
+    if platform_id == "darwin":
+        return [
+            step(
+                "Re-sign WeChat",
+                "sudo codesign --force --deep --sign - /Applications/WeChat.app",
+                "wx-cli needs the desktop WeChat app to be re-signed before initialization on macOS.",
+            ),
+            step(
+                "Restart WeChat",
+                "open -a WeChat",
+                "After codesign, reopen WeChat and make sure your account is logged in.",
+            ),
+            step(
+                "Initialize wx-cli",
+                wx_init_command,
+                "This prepares the accessibility / memory-scan layer used by wx-cli on macOS.",
+            ),
+            step(
+                "Verify readable sessions",
+                verify_command,
+                "You should see JSON output before running wx-summary-skill.",
+            ),
+        ]
+    if platform_id == "linux":
+        return [
+            step(
+                "Keep desktop WeChat running",
+                "Launch desktop WeChat and make sure the target account is fully logged in.",
+                "wx-cli reads your local desktop session data and needs the app running.",
+            ),
+            step(
+                "Initialize wx-cli",
+                wx_init_command,
+                "Official upstream Linux init step.",
+            ),
+            step(
+                "Verify readable sessions",
+                verify_command,
+                "You should see JSON output before running wx-summary-skill.",
+            ),
+        ]
+    if platform_id == "win32":
+        return [
+            step(
+                "Open Administrator PowerShell",
+                "Start-Process PowerShell -Verb RunAs",
+                "The official Windows init flow expects an elevated PowerShell session.",
+            ),
+            step(
+                "Keep desktop WeChat running",
+                "Launch desktop WeChat and make sure the target account is fully logged in.",
+                "wx-cli reads your local desktop session data and needs the app running.",
+            ),
+            step(
+                "Initialize wx-cli",
+                wx_init_command,
+                "Official upstream Windows init step.",
+            ),
+            step(
+                "Verify readable sessions",
+                verify_command,
+                "You should see JSON output before running wx-summary-skill.",
+            ),
+        ]
+    return [
+        step(
+            "Initialize wx-cli",
+            f"{wx_bin} init",
+            "If sessions are unreadable, the upstream init flow usually fixes it.",
+        ),
+        step(
+            "Verify readable sessions",
+            verify_command,
+            "You should see JSON output before running wx-summary-skill.",
+        ),
+    ]
+
+
+def build_report(project_root: Path, platform_override: str | None = None) -> dict[str, Any]:
     state = inspect_payload(project_root)
     resolved = state["state"]
     default_data_root = Path(resolved["default_data_root"]).expanduser()
     wx_bin = state.get("resolved_defaults", {}).get("wx_bin") or "wx"
     wx_path = shutil.which(wx_bin)
+    platform_id = normalized_platform(platform_override)
+    python_cmd = python_command(platform_id)
 
     report: dict[str, Any] = {
         "project_root": str(project_root),
         "ready": False,
+        "platform": platform_id,
+        "platform_label": platform_label(platform_id),
+        "python_command": python_cmd,
         "wx_bin": wx_bin,
         "wx_path": wx_path,
         "checks": [],
@@ -103,57 +260,16 @@ def build_report(project_root: Path) -> dict[str, Any]:
         )
 
     if not wx_path:
-        report["next_steps"].extend(
-            [
-                step(
-                    "Install wx-cli with npm",
-                    "npm install -g @jackwener/wx-cli",
-                    "Official install path when you already have Node.js / npm.",
-                ),
-                step(
-                    "Install wx-cli with the official script",
-                    "curl -fsSL https://raw.githubusercontent.com/jackwener/wx-cli/main/install.sh | bash",
-                    "Fast path if you do not want to set up npm first.",
-                ),
-                step(
-                    "Optional: add the upstream wx-cli skill",
-                    "npx skills add jackwener/wx-cli -g",
-                    "Useful if you also want a standalone skill around wx-cli itself.",
-                ),
-            ]
-        )
+        report["next_steps"].extend(install_steps_for_missing_wx(platform_id))
 
-    if wx_path and sessions_check and not sessions_check["ok"] and sys.platform == "darwin":
-        report["next_steps"].extend(
-            [
-                step(
-                    "Re-sign WeChat",
-                    "sudo codesign --force --deep --sign - /Applications/WeChat.app",
-                    "wx-cli needs the default macOS WeChat app to be re-signed before initialization.",
-                ),
-                step(
-                    "Restart WeChat",
-                    "open -a WeChat",
-                    "After codesign, reopen WeChat and make sure your account is logged in.",
-                ),
-                step(
-                    "Initialize wx-cli",
-                    "sudo wx init",
-                    "This prepares the accessibility / injection layer used by wx-cli on macOS.",
-                ),
-                step(
-                    "Verify readable sessions",
-                    "wx sessions --json",
-                    "You should see JSON output before running wx-summary-skill.",
-                ),
-            ]
-        )
+    if wx_path and sessions_check and not sessions_check["ok"]:
+        report["next_steps"].extend(recovery_steps_for_unreadable_sessions(platform_id, wx_bin))
 
     if not state.get("config_path") and not state.get("baoyu_extend_path"):
         report["next_steps"].append(
             step(
                 "Save a local data root for this repo",
-                "python3 scripts/skill_state.py init-config --scope project --data-root ./wechat",
+                config_init_command(platform_id),
                 "This repo can run without baoyu; local config keeps the data path reusable.",
             )
         )
@@ -168,6 +284,8 @@ def print_text(report: dict[str, Any]) -> None:
     status = "ready" if report["ready"] else "action-needed"
     print(f"wx-summary-skill doctor: {status}")
     print(f"- project_root: {report['project_root']}")
+    print(f"- platform: {report['platform_label']} ({report['platform']})")
+    print(f"- python_command: {report['python_command']}")
     print(f"- wx_bin: {report['wx_bin']}")
     print(f"- wx_path: {report['wx_path'] or 'missing'}")
     for item in report["checks"]:
@@ -194,7 +312,7 @@ def print_text(report: dict[str, Any]) -> None:
 
 def main() -> None:
     args = parse_args()
-    report = build_report(project_root_from(args.project_root))
+    report = build_report(project_root_from(args.project_root), args.platform)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

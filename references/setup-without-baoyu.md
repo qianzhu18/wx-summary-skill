@@ -12,16 +12,24 @@ Official upstream:
 
 - GitHub: <https://github.com/jackwener/wx-cli>
 
+Use `python3` on macOS / Linux and `py -3` on Windows PowerShell for this repo's helper scripts.
+
 Choose one install path:
 
 ```bash
 npm install -g @jackwener/wx-cli
 ```
 
-or:
+macOS / Linux shell installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jackwener/wx-cli/main/install.sh | bash
+```
+
+Windows PowerShell installer:
+
+```powershell
+irm https://raw.githubusercontent.com/jackwener/wx-cli/main/install.ps1 | iex
 ```
 
 If you also want the upstream `wx-cli` skill itself:
@@ -30,9 +38,9 @@ If you also want the upstream `wx-cli` skill itself:
 npx skills add jackwener/wx-cli -g
 ```
 
-## 2. macOS initialization
+## 2. Initialize by platform
 
-On macOS, follow the upstream initialization flow before using this repo:
+macOS:
 
 ```bash
 sudo codesign --force --deep --sign - /Applications/WeChat.app
@@ -41,9 +49,25 @@ sudo wx init
 wx sessions --json
 ```
 
-If your WeChat app is not under `/Applications/WeChat.app`, replace the path.
+Windows PowerShell, run as Administrator:
+
+```powershell
+wx init
+wx sessions --json
+```
+
+Linux:
+
+```bash
+sudo wx init
+wx sessions --json
+```
+
+If your macOS WeChat app is not under `/Applications/WeChat.app`, replace the path.
 
 `wx sessions --json` should return JSON before you continue.
+
+On Windows and Linux, keep desktop WeChat running and fully logged in before `wx init`.
 
 ## 3. Save repo-native config
 
@@ -51,6 +75,12 @@ If you are not reusing baoyu defaults, initialize the local config once:
 
 ```bash
 python3 scripts/skill_state.py init-config --scope project --data-root ./wechat
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 scripts/skill_state.py init-config --scope project --data-root .\wechat
 ```
 
 Use `--scope xdg` if you want one shared config across multiple projects.
@@ -61,6 +91,12 @@ Before invoking the skill, verify the whole stack:
 
 ```bash
 python3 scripts/check_wechat_env.py
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 scripts/check_wechat_env.py
 ```
 
 When the doctor returns `ready`, you can call:

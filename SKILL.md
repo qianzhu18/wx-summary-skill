@@ -31,6 +31,12 @@ When asking the user for choices:
 
 ## Prerequisites
 
+When running the bundled Python scripts below:
+
+- use `python3` on macOS / Linux
+- use `py -3` on Windows PowerShell
+- use `python` only if that is your machine's Python 3 launcher
+
 Before doing anything else, verify these in order:
 
 ```bash

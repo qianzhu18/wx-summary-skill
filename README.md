@@ -14,13 +14,15 @@ This repository focuses on extraction, analysis, and local rendering. It intenti
 
 ## Real usage example
 
-The README case is now aligned to the author's own group workflow:
+This screenshot is a real run from the skill, hosted through the same O-Publish + Cloudflare R2 image workflow used in the author's publishing setup.
+
+![wx-summary-skill real usage example](https://img.qianzhu.online/skills/wx-summary-skill/readme/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png)
+
+Case:
 
 - group: `IGN AI | 洋来`
 - range: `7d`
 - mode: `text`
-
-The screenshot for this case will be refreshed after a new run, so the README does not temporarily show a mismatched group image.
 
 Example reply:
 
@@ -28,7 +30,7 @@ Example reply:
 IGN AI | 洋来，7d，text
 ```
 
-The previous screenshot asset is still kept in [docs/assets/wx-summary-skill-usage-example-2026-05-18.png](docs/assets/wx-summary-skill-usage-example-2026-05-18.png) until the new `IGN AI | 洋来` example screenshot replaces it.
+The source file used for this README example is kept in [docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png](docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png).
 
 ## Why this exists
 
@@ -76,6 +78,22 @@ $wx-summary-skill
 
 If you prefer another local skill directory, clone or symlink this repo there instead.
 
+## Platform support
+
+According to the official `wx-cli` README, the upstream install/init flow covers:
+
+- macOS Apple Silicon / Intel
+- Linux x86_64 / arm64
+- Windows x86_64
+
+This repo follows that same platform model. The only important command difference is:
+
+- macOS / Linux: use `python3`
+- Windows PowerShell: use `py -3`
+- if your machine exposes only `python` for Python 3, use that instead
+
+The built-in doctor is platform-aware and prints platform-specific next steps.
+
 ## Start from zero: no baoyu, no wx-cli
 
 This is the missing path that confused earlier versions of the repo.
@@ -94,10 +112,16 @@ Choose one install path:
 npm install -g @jackwener/wx-cli
 ```
 
-or:
+macOS / Linux shell installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jackwener/wx-cli/main/install.sh | bash
+```
+
+Windows PowerShell installer:
+
+```powershell
+irm https://raw.githubusercontent.com/jackwener/wx-cli/main/install.ps1 | iex
 ```
 
 If you also want the upstream `wx-cli` skill itself for your agent runtime:
@@ -106,9 +130,9 @@ If you also want the upstream `wx-cli` skill itself for your agent runtime:
 npx skills add jackwener/wx-cli -g
 ```
 
-### 2. Initialize `wx-cli` on macOS
+### 2. Initialize `wx-cli` by platform
 
-Follow the upstream macOS flow before using this repo:
+macOS:
 
 ```bash
 sudo codesign --force --deep --sign - /Applications/WeChat.app
@@ -117,9 +141,24 @@ sudo wx init
 wx sessions --json
 ```
 
+Windows PowerShell, run as Administrator:
+
+```powershell
+wx init
+wx sessions --json
+```
+
+Linux:
+
+```bash
+sudo wx init
+wx sessions --json
+```
+
 Notes:
 
 - if your WeChat app is not under `/Applications/WeChat.app`, replace the path
+- on Windows and Linux, keep desktop WeChat running and fully logged in before `wx init`
 - `wx sessions --json` should return real JSON before you continue
 - if it fails, rerun the exact failing command first before blaming the summary layer
 
@@ -127,9 +166,18 @@ Notes:
 
 This repo now includes an environment check script:
 
+macOS / Linux:
+
 ```bash
 cd "$HOME/.codex/skills/wx-summary-skill"
 python3 scripts/check_wechat_env.py
+```
+
+Windows PowerShell:
+
+```powershell
+Set-Location "$HOME\.codex\skills\wx-summary-skill"
+py -3 scripts/check_wechat_env.py
 ```
 
 The doctor checks:
@@ -150,6 +198,12 @@ If you are **not** reusing baoyu defaults, initialize local config once:
 python3 scripts/skill_state.py init-config --scope project --data-root ./wechat
 ```
 
+Windows PowerShell:
+
+```powershell
+py -3 scripts/skill_state.py init-config --scope project --data-root .\wechat
+```
+
 If you want one config shared across multiple projects:
 
 ```bash
@@ -158,7 +212,7 @@ python3 scripts/skill_state.py init-config --scope xdg --data-root ~/wechat-data
 
 ### 5. Start the skill
 
-Once `python3 scripts/check_wechat_env.py` returns `ready`, run:
+Once the doctor returns `ready`, run:
 
 ```text
 $wx-summary-skill
@@ -233,6 +287,8 @@ python3 scripts/skill_state.py save-session \
 ```
 
 ## Typical workflow
+
+Below, the examples use the macOS / Linux launcher form. On Windows, replace `python3` with `py -3`.
 
 ### 1. Check the environment
 
