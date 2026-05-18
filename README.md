@@ -1,93 +1,85 @@
 # wx-summary-skill
 
-An interactive WeChat group digest skill for Codex / Claude-style agent workflows.
+一个基于 `wx-cli` 的微信群聊摘要 skill，用来把“临时拉一段群聊做总结”变成一个可重复、可检查、可积累上下文的本地工作流。
 
-It turns one-off WeChat summary prompts into a reusable local flow:
+它主要负责三件事：
 
-1. pick a saved recent group or choose `Other`
-2. choose a time preset or custom date range
-3. choose output mode: text summary or local web digest
-4. persist recent groups and defaults for reuse
-5. generate structured local artifacts from real WeChat chat history
+1. 选择群聊
+2. 选择时间范围
+3. 生成文字摘要或本地网页信息报
 
-This repository focuses on extraction, analysis, and local rendering. It intentionally does **not** include deployment.
+补充能力：
 
-## Real usage example
+- 记住最近使用过的群
+- 记住默认时间范围和输出模式
+- 生成可追溯的本地分析材料
+- 提供 bootstrap / doctor 自检入口
 
-This screenshot is a real run from the skill, hosted through the same O-Publish + Cloudflare R2 image workflow used in the author's publishing setup.
+这个仓库只做本地提取、分析和渲染，不做部署服务。
+
+## 学习声明
+
+这是一个**仅供学习、研究和个人工作流实验**的开源项目。
+
+请只在以下前提下使用：
+
+- 你操作的是**自己的设备**
+- 你登录的是**自己的微信账号**
+- 你处理的是**自己有权访问或已获授权**的聊天数据
+- 你的使用方式符合当地法律、平台条款和团队内部规范
+
+本项目默认面向本地、可审计、可手动检查的使用场景，不鼓励把它用于未授权的数据采集、批量抓取或绕过权限控制的用途。
+
+## 它和 `wx-cli` 的关系
+
+这个仓库**不是**微信 CLI 本体，它是构建在 `wx-cli` 之上的摘要工作流。
+
+- `wx-cli` 负责本机微信数据访问、命令行查询、会话读取和初始化
+- `wx-summary-skill` 负责交互、状态记忆、时间范围解析、分析材料生成和摘要输出
+
+如果你还没有准备好本机微信 CLI 环境，需要先把 `wx-cli` 装好，并在你自己的已登录桌面微信环境里完成初始化。
+
+官方仓库：
+
+- <https://github.com/jackwener/wx-cli>
+
+对这个项目来说，判断依赖层是否就绪的标准很简单：
+
+```bash
+wx sessions --json
+```
+
+只要这条命令能返回真实 JSON，就说明 `wx-cli` 已经完成了它自己的会话/密钥访问准备，本项目就可以继续工作。
+
+## 实际效果
+
+下面这张图来自真实运行截图：
 
 ![wx-summary-skill real usage example](https://img.qianzhu.online/skills/wx-summary-skill/readme/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png)
 
-Case:
+示例：
 
-- group: `IGN AI | 洋来`
-- range: `7d`
-- mode: `text`
+- 群聊：`IGN AI | 洋来`
+- 范围：`7d`
+- 模式：`text`
 
-Example reply:
+示例输入：
 
 ```text
 IGN AI | 洋来，7d，text
 ```
 
-The source file used for this README example is kept in [docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png](docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png).
+源文件保存在 [docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png](docs/assets/wx-summary-skill-ign-ai-yanglai-example-2026-05-18.png)。
 
-## Why this exists
+## 快速开始
 
-Most WeChat summary prompts forget everything about the previous run.
-
-`wx-summary-skill` keeps a small amount of reusable state:
-
-- remembers recent groups
-- remembers preferred time preset and output mode
-- reuses existing baoyu defaults when available
-- still works without baoyu through repo-native config
-- supports both a structured markdown digest and a local HTML digest
-- keeps the workflow local and inspectable
-
-## What this repo does
-
-- interactive group selection
-- recent-group memory with `Other` fallback
-- built-in time presets: `1d`, `3d`, `7d`, `14d`, `30d`, `custom`
-- two output modes:
-  - `text`: structured summary for reading and follow-up
-  - `webpage`: static local digest page
-- reusable local state
-- real-message analysis bundle with stats, quotes, link titles, and activity patterns
-
-## What this repo does not do
-
-- it does not fetch WeChat data by itself without `wx-cli`
-- it does not require `baoyu-wechat-summary`, but it can reuse baoyu config when present
-- it does not deploy HTML output
-
-## Install the skill
-
-Clone directly into your Codex skills directory:
-
-```bash
-git clone https://github.com/qianzhu18/wx-summary-skill.git "$HOME/.codex/skills/wx-summary-skill"
-```
-
-After bootstrap returns `ready`, invoke it with:
-
-```text
-$wx-summary-skill
-```
-
-If you prefer another local skill directory, clone or symlink this repo there instead.
-
-## Quickstart
-
-If you want the shortest path from a GitHub clone to a usable local setup, run the bootstrap script right after cloning.
+### 1. 克隆到本地 skill 目录
 
 macOS / Linux:
 
 ```bash
 git clone https://github.com/qianzhu18/wx-summary-skill.git "$HOME/.codex/skills/wx-summary-skill"
 cd "$HOME/.codex/skills/wx-summary-skill"
-python3 scripts/bootstrap_skill.py
 ```
 
 Windows PowerShell:
@@ -95,73 +87,43 @@ Windows PowerShell:
 ```powershell
 git clone https://github.com/qianzhu18/wx-summary-skill.git "$HOME\.codex\skills\wx-summary-skill"
 Set-Location "$HOME\.codex\skills\wx-summary-skill"
-py -3 scripts/bootstrap_skill.py
 ```
 
-The bootstrap script:
+### 2. 安装 `wx-cli`
 
-- creates repo-native config automatically when it is missing
-- detects whether baoyu config is already reusable
-- runs the built-in doctor
-- prints the exact next commands for your platform
-- exits `ready` only when the machine can already read WeChat sessions
-- leaves you with a repo that can be used directly from the GitHub clone path
+选一种方式即可。
 
-## Platform support
-
-According to the official `wx-cli` README, the upstream install/init flow covers:
-
-- macOS Apple Silicon / Intel
-- Linux x86_64 / arm64
-- Windows x86_64
-
-This repo follows that same platform model. The only important command difference is:
-
-- macOS / Linux: use `python3`
-- Windows PowerShell: use `py -3`
-- if your machine exposes only `python` for Python 3, use that instead
-
-The built-in doctor and bootstrap path are both platform-aware and print platform-specific next steps.
-
-## Start from zero: no baoyu, no wx-cli
-
-This is the missing path that confused earlier versions of the repo.
-
-`wx-summary-skill` only needs [`wx-cli`](https://github.com/jackwener/wx-cli) plus a readable WeChat session. `baoyu-wechat-summary` is optional.
-
-### 1. Install `wx-cli`
-
-Official upstream repo:
-
-- [jackwener/wx-cli](https://github.com/jackwener/wx-cli)
-
-Choose one install path:
+`npm` 安装：
 
 ```bash
 npm install -g @jackwener/wx-cli
 ```
 
-macOS / Linux shell installer:
+macOS / Linux 安装脚本：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jackwener/wx-cli/main/install.sh | bash
 ```
 
-Windows PowerShell installer:
+Windows PowerShell 安装脚本：
 
 ```powershell
 irm https://raw.githubusercontent.com/jackwener/wx-cli/main/install.ps1 | iex
 ```
 
-If you also want the upstream `wx-cli` skill itself for your agent runtime:
+### 3. 在本机完成微信 CLI 初始化
+
+这一步的目标不是“跑完某个项目脚本”，而是让你的本机微信环境真的能被 `wx-cli` 正常读取。
+
+换句话说，这一步完成后你要看到的是：
 
 ```bash
-npx skills add jackwener/wx-cli -g
+wx sessions --json
 ```
 
-### 2. Initialize `wx-cli` by platform
+返回真实 JSON。
 
-macOS:
+macOS：
 
 ```bash
 sudo codesign --force --deep --sign - /Applications/WeChat.app
@@ -170,78 +132,180 @@ sudo wx init
 wx sessions --json
 ```
 
-Windows PowerShell, run as Administrator:
+Windows PowerShell（管理员）：
 
 ```powershell
 wx init
 wx sessions --json
 ```
 
-Linux:
+Linux：
 
 ```bash
 sudo wx init
 wx sessions --json
 ```
 
-Notes:
+说明：
 
-- if your WeChat app is not under `/Applications/WeChat.app`, replace the path
-- on Windows and Linux, keep desktop WeChat running and fully logged in before `wx init`
-- `wx sessions --json` should return real JSON before you continue
-- if it fails, rerun the exact failing command first before blaming the summary layer
+- 这一步由 `wx-cli` 负责完成它所需的本机会话/密钥访问准备
+- 本项目本身**不单独实现**微信密钥提取逻辑
+- 对本项目而言，只要 `wx sessions --json` 能正常返回，就说明依赖层已经准备好
+- macOS 如果微信不在 `/Applications/WeChat.app`，请替换成你的实际路径
+- Windows / Linux 请先确保桌面微信已打开并完成登录
 
-### 3. Run the bootstrap path
-
-The fastest path for direct GitHub users is:
+### 4. 跑 bootstrap
 
 macOS / Linux:
 
 ```bash
-cd "$HOME/.codex/skills/wx-summary-skill"
 python3 scripts/bootstrap_skill.py
 ```
 
 Windows PowerShell:
 
 ```powershell
-Set-Location "$HOME\.codex\skills\wx-summary-skill"
 py -3 scripts/bootstrap_skill.py
 ```
 
-This bootstrap command will initialize repo-native config when needed, then run the doctor for you.
+bootstrap 会：
 
-### 4. Run the built-in doctor
+- 自动创建 repo 本地配置（如果还没有）
+- 检查 `wx` 是否可用
+- 检查 `wx --version`
+- 检查 `wx sessions --json`
+- 输出下一步建议
 
-This repo now includes an environment check script:
+只有在依赖层真的 ready 时，它才会给出可直接使用的状态。
+
+### 5. 启动 skill
+
+当 bootstrap 或 doctor 返回 `ready` 后，直接调用：
+
+```text
+$wx-summary-skill
+```
+
+## 首次使用建议
+
+第一次正式跑，建议先用一个低风险群做一单短范围测试：
+
+- 群聊：任选一个你确认有权限处理的群
+- 时间：`1d`
+- 模式：`text`
+
+这样你可以先验证三件事：
+
+- 群名搜索是否符合你的实际使用习惯
+- 输出目录是否在你预期的位置
+- 摘要结构是否满足你的日常工作流
+
+## 平台说明
+
+当前这套仓库按 `wx-cli` 的可用平台来设计辅助脚本和自检流程：
+
+- macOS
+- Linux
+- Windows
+
+Python 命令约定：
+
+- macOS / Linux：`python3`
+- Windows PowerShell：`py -3`
+- 如果你的机器上 `python` 就是 Python 3，也可以自行替换
+
+## doctor 和 bootstrap
+
+这个仓库有两个面向落地的入口：
+
+- `scripts/bootstrap_skill.py`
+- `scripts/check_wechat_env.py`
+
+区别：
+
+- `bootstrap_skill.py` 更适合刚 clone 下来的第一次使用
+- `check_wechat_env.py` 更适合排查环境问题
+
+直接检查：
 
 macOS / Linux:
 
 ```bash
-cd "$HOME/.codex/skills/wx-summary-skill"
 python3 scripts/check_wechat_env.py
 ```
 
 Windows PowerShell:
 
 ```powershell
-Set-Location "$HOME\.codex\skills\wx-summary-skill"
 py -3 scripts/check_wechat_env.py
 ```
 
-The doctor checks:
+doctor 会检查：
 
-- whether `wx` is in `PATH`
-- whether `wx --version` works
-- whether `wx sessions --json` is readable
-- whether this repo already has a local config
-- where the default data root will be written
+- `wx` 是否在 `PATH`
+- `wx --version` 是否正常
+- `wx sessions --json` 是否可读
+- 当前 repo 是否已有本地配置
+- 默认输出目录会写到哪里
 
-If the doctor reports `action-needed`, it prints the next commands to run.
+## 这个项目会生成什么
 
-### 5. Optional: save repo-native config manually
+`prepare_wechat_digest.py` 会生成：
 
-If you want to override what bootstrap would write, or if you prefer a shared config scope, initialize local config manually:
+- `raw/*.messages.json`
+- `raw/*.stats.json`
+- `analysis/*.analysis.json`
+- `analysis/*.briefing.md`
+
+`render_web_digest.py` 会生成：
+
+- `<group_dir>/<since>_<until>.web.md`
+- `<group_dir>/site/index.html`
+- `<group_dir>/dist/index.html`
+- `<group_dir>/history.json`
+
+也就是说，你不仅拿到一个摘要结果，还能拿到一组本地证据材料，方便复查和二次加工。
+
+## 本地配置和状态
+
+### Config
+
+配置文件按以下顺序读取第一个存在的文件：
+
+- `<project>/.wx-summary-skill/config.json`
+- `${XDG_CONFIG_HOME:-$HOME/.config}/wx-summary-skill/config.json`
+- `$HOME/.wx-summary-skill/config.json`
+
+支持字段：
+
+- `data_root`
+- `self_wxid`（可选）
+- `self_display`（可选）
+- `wx_bin`（可选，默认 `wx`）
+
+### State
+
+状态文件按以下顺序读取第一个存在的文件：
+
+- `<project>/.wx-summary-skill/state.json`
+- `${XDG_CONFIG_HOME:-$HOME/.config}/wx-summary-skill/state.json`
+- `$HOME/.wx-summary-skill/state.json`
+
+状态里会保存：
+
+- 最近使用过的群
+- 默认时间范围
+- 默认输出模式
+- 默认文字摘要样式
+- 默认网页摘要样式
+
+查看当前合并后的状态：
+
+```bash
+python3 scripts/skill_state.py inspect
+```
+
+手动初始化配置：
 
 ```bash
 python3 scripts/skill_state.py init-config --scope project --data-root ./wechat
@@ -253,76 +317,7 @@ Windows PowerShell:
 py -3 scripts/skill_state.py init-config --scope project --data-root .\wechat
 ```
 
-If you want one config shared across multiple projects:
-
-```bash
-python3 scripts/skill_state.py init-config --scope xdg --data-root ~/wechat-data
-```
-
-### 6. Start the skill
-
-Once the doctor returns `ready`, run:
-
-```text
-$wx-summary-skill
-```
-
-## Already have baoyu / wx-cli
-
-If you already use `baoyu-wechat-summary` or a working `wx-cli` setup, the repo will reuse that config automatically when one of these exists:
-
-- `.baoyu-skills/baoyu-wechat-summary/EXTEND.md` relative to the project root
-- `${XDG_CONFIG_HOME:-$HOME/.config}/baoyu-skills/baoyu-wechat-summary/EXTEND.md`
-- `$HOME/.baoyu-skills/baoyu-wechat-summary/EXTEND.md`
-
-Useful reused keys:
-
-- `self_wxid`
-- `self_display`
-- `data_root`
-
-## Repo-native config and state
-
-This repo now has its own config layer, so it no longer depends on baoyu to be useful.
-
-### Config
-
-Config is read from the first existing file in this order:
-
-- `<project>/.wx-summary-skill/config.json`
-- `${XDG_CONFIG_HOME:-$HOME/.config}/wx-summary-skill/config.json`
-- `$HOME/.wx-summary-skill/config.json`
-
-Supported keys:
-
-- `data_root`
-- `self_wxid` (optional)
-- `self_display` (optional)
-- `wx_bin` (optional, default: `wx`)
-
-### State
-
-State is read from the first existing file in this order:
-
-- `<project>/.wx-summary-skill/state.json`
-- `${XDG_CONFIG_HOME:-$HOME/.config}/wx-summary-skill/state.json`
-- `$HOME/.wx-summary-skill/state.json`
-
-State stores:
-
-- recent groups
-- default time preset
-- default summary mode
-- default text style
-- default webpage style
-
-Inspect the merged view any time:
-
-```bash
-python3 scripts/skill_state.py inspect
-```
-
-Save a session:
+保存一次会话默认值：
 
 ```bash
 python3 scripts/skill_state.py save-session \
@@ -335,41 +330,35 @@ python3 scripts/skill_state.py save-session \
   --web-style daily-report-v1
 ```
 
-## Typical workflow
+## 手动工作流
 
-Below, the examples use the macOS / Linux launcher form. On Windows, replace `python3` with `py -3`.
+如果你想逐步执行底层脚本，可以按这个顺序：
 
-### 1. Check the environment
+### 1. 检查环境
 
 ```bash
 python3 scripts/bootstrap_skill.py
 ```
 
-Or run the lower-level doctor directly:
-
-```bash
-python3 scripts/check_wechat_env.py
-```
-
-### 2. Inspect state
+### 2. 查看当前状态
 
 ```bash
 python3 scripts/skill_state.py inspect
 ```
 
-### 3. Resolve the range
+### 3. 解析时间范围
 
 ```bash
 python3 scripts/resolve_time_range.py --preset 7d
 ```
 
-Custom dates:
+自定义日期：
 
 ```bash
 python3 scripts/resolve_time_range.py --since 2026-05-11 --until 2026-05-17
 ```
 
-### 4. Build the analysis bundle
+### 4. 生成分析材料
 
 ```bash
 python3 scripts/prepare_wechat_digest.py \
@@ -379,26 +368,17 @@ python3 scripts/prepare_wechat_digest.py \
   --data-root "./wechat"
 ```
 
-### 5A. Produce a text summary
+### 5A. 输出文字摘要
 
-Read the generated briefing and raw evidence as needed, then write:
+最终文字摘要建议写成：
 
 ```text
 <group_dir>/2026-05-11_2026-05-17.text-summary.md
 ```
 
-Expected section structure:
+推荐结构见 [references/text-summary-format.md](references/text-summary-format.md)。
 
-- `群聊总结`
-- `热点`
-- `需求与链接人`
-- `资源`
-- `活跃之星`
-- `词云`
-
-See [references/text-summary-format.md](references/text-summary-format.md).
-
-### 5B. Produce a local web digest
+### 5B. 输出本地网页信息报
 
 ```bash
 python3 scripts/render_web_digest.py \
@@ -406,28 +386,12 @@ python3 scripts/render_web_digest.py \
   --analysis /abs/path/to/analysis.json
 ```
 
-See:
+更多格式说明：
 
 - [references/summary-schema.md](references/summary-schema.md)
 - [references/webpage-mode.md](references/webpage-mode.md)
 
-## What gets generated
-
-`prepare_wechat_digest.py` creates:
-
-- `raw/*.messages.json`
-- `raw/*.stats.json`
-- `analysis/*.analysis.json`
-- `analysis/*.briefing.md`
-
-`render_web_digest.py` writes local artifacts such as:
-
-- `<group_dir>/<since>_<until>.web.md`
-- `<group_dir>/site/index.html`
-- `<group_dir>/dist/index.html`
-- `<group_dir>/history.json`
-
-## Repository layout
+## 仓库结构
 
 ```text
 .
@@ -458,15 +422,22 @@ See:
     └── skill_state.py
 ```
 
-## Selftest
+## 自测
 
-Run the repository smoke test locally with:
+本地 smoke test：
 
 ```bash
 python3 scripts/selftest_repo.py
 ```
 
-It validates the bootstrap path plus the platform-specific doctor branches. The same smoke test runs in GitHub Actions on macOS, Linux, and Windows.
+它会覆盖：
+
+- 脚本可编译性
+- bootstrap 路径
+- 平台分支提示
+- doctor 的关键恢复提示
+
+GitHub Actions 里也会跑同一套基础自测。
 
 ## License
 
