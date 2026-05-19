@@ -57,6 +57,7 @@ If the doctor fails:
 1. tell the user the exact failing command
 2. read [references/setup-without-baoyu.md](references/setup-without-baoyu.md)
 3. guide them through upstream `wx-cli` install / init before continuing
+4. if the machine is on WeChat 4.x or `wx sessions --json` stays unreadable, switch to the manual transcript fallback instead of blocking the workflow
 
 This skill should reuse existing baoyu preferences when available, but it must also work without baoyu by using repo-native config.
 
@@ -189,7 +190,9 @@ Rules:
 
 ## Fetch + Analyze
 
-Once group and date range are fixed, always build a local analysis bundle first:
+Once group and date range are fixed, always build a local analysis bundle first.
+
+Primary path:
 
 ```bash
 python3 scripts/prepare_wechat_digest.py \
@@ -203,10 +206,43 @@ This writes:
 
 - `raw/*.messages.json`
 - `raw/*.stats.json`
+- `raw/*.transcript.txt` when manual transcript mode is used
 - `analysis/*.analysis.json`
 - `analysis/*.briefing.md`
 
 Read the generated briefing before opening raw messages. It is the cheapest way to understand the selected range.
+
+### Manual transcript fallback
+
+When `wx-cli` is blocked by WeChat 4.x or unreadable local state, do not stop the workflow. Ask the user to:
+
+1. open the target chat in desktop WeChat
+2. scroll to the first date they want
+3. use `Cmd+A` / `Ctrl+A`
+4. use `Cmd+C` / `Ctrl+C`
+
+Then build the same analysis bundle from the copied transcript:
+
+```bash
+python3 scripts/prepare_wechat_digest.py \
+  --chat "<group_name>" \
+  --since YYYY-MM-DD \
+  --until YYYY-MM-DD \
+  --data-root "<data_root>" \
+  --source clipboard
+```
+
+If the user prefers a saved text file instead of live clipboard, use:
+
+```bash
+python3 scripts/prepare_wechat_digest.py \
+  --chat "<group_name>" \
+  --since YYYY-MM-DD \
+  --until YYYY-MM-DD \
+  --data-root "<data_root>" \
+  --source file \
+  --input-file /abs/path/to/transcript.txt
+```
 
 ## Output Modes
 

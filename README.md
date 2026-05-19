@@ -1,6 +1,6 @@
 # wx-summary-skill
 
-一个基于 `wx-cli` 的微信群聊摘要 skill，用来把“临时拉一段群聊做总结”变成一个可重复、可检查、可积累上下文的本地工作流。
+一个以 `wx-cli` 为主路径、同时支持人工复制 fallback 的微信群聊摘要 skill，用来把“临时拉一段群聊做总结”变成一个可重复、可检查、可积累上下文的本地工作流。
 
 它主要负责三件事：
 
@@ -36,6 +36,8 @@
 
 - `wx-cli` 负责本机微信数据访问、命令行查询、会话读取和初始化
 - `wx-summary-skill` 负责交互、状态记忆、时间范围解析、分析材料生成和摘要输出
+
+默认情况下它会先走 `wx-cli`。如果你的机器已经进入微信 4.x / `wx-cli` 失效 / 密钥文件打不通的状态，这个仓库也支持**人工复制聊天记录**作为并列入口，不会把整条摘要链路卡死在依赖层。
 
 如果你还没有准备好本机微信 CLI 环境，需要先把 `wx-cli` 装好，并在你自己的已登录桌面微信环境里完成初始化。
 
@@ -273,6 +275,7 @@ doctor 会检查：
 
 - `raw/*.messages.json`
 - `raw/*.stats.json`
+- `raw/*.transcript.txt`（仅手工复制模式）
 - `analysis/*.analysis.json`
 - `analysis/*.briefing.md`
 
@@ -383,6 +386,8 @@ python3 scripts/resolve_time_range.py --since 2026-05-11 --until 2026-05-17
 
 ### 4. 生成分析材料
 
+#### 4A. 默认 `wx-cli` 模式
+
 ```bash
 python3 scripts/prepare_wechat_digest.py \
   --chat "Christina的AI+ 知识圈" \
@@ -390,6 +395,51 @@ python3 scripts/prepare_wechat_digest.py \
   --until 2026-05-17 \
   --data-root "./wechat"
 ```
+
+#### 4B. 微信 4.x / `wx-cli` 失败时的人工复制模式
+
+先在桌面微信里打开目标群，滚到你要的起始日期，再全选复制。
+
+macOS / Linux:
+
+```bash
+python3 scripts/prepare_wechat_digest.py \
+  --chat "Christina的AI+ 知识圈" \
+  --since 2026-05-11 \
+  --until 2026-05-17 \
+  --data-root "./wechat" \
+  --source clipboard
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 scripts/prepare_wechat_digest.py `
+  --chat "Christina的AI+ 知识圈" `
+  --since 2026-05-11 `
+  --until 2026-05-17 `
+  --data-root .\wechat `
+  --source clipboard
+```
+
+如果你想先把复制内容落成文本文件，也可以：
+
+```bash
+python3 scripts/prepare_wechat_digest.py \
+  --chat "Christina的AI+ 知识圈" \
+  --since 2026-05-11 \
+  --until 2026-05-17 \
+  --data-root "./wechat" \
+  --source file \
+  --input-file ./transcript.txt
+```
+
+说明：
+
+- `--source clipboard` 会直接读取系统剪贴板
+- `--source file` 会解析你保存的纯文本聊天记录
+- 两种模式都会写出同样的 `raw/*.messages.json`、`raw/*.stats.json`、`analysis/*.analysis.json`、`analysis/*.briefing.md`
+- 手工复制模式还会额外保留一份 `raw/*.transcript.txt` 方便回看原始文本
 
 ### 5A. 输出文字摘要
 
@@ -460,6 +510,7 @@ python3 scripts/selftest_repo.py
 - bootstrap 路径
 - 平台分支提示
 - doctor 的关键恢复提示
+- 人工复制 transcript 的解析路径
 
 GitHub Actions 里也会跑同一套基础自测。
 

@@ -75,6 +75,14 @@ def config_init_command(platform_id: str) -> str:
     )
 
 
+def manual_fallback_command(platform_id: str) -> str:
+    py = python_command(platform_id)
+    return (
+        f'{py} scripts/prepare_wechat_digest.py --chat "<群名>" '
+        f"--since YYYY-MM-DD --until YYYY-MM-DD --source clipboard"
+    )
+
+
 def load_json_object(path: Path) -> dict[str, Any] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -403,6 +411,16 @@ def recovery_steps_for_unreadable_sessions(
     ]
 
 
+def manual_fallback_step(platform_id: str) -> dict[str, str]:
+    shortcut = "Ctrl+A / Ctrl+C" if platform_id == "win32" else "Cmd+A / Cmd+C"
+    return step(
+        "Fallback: import a copied transcript instead of wx-cli",
+        manual_fallback_command(platform_id),
+        "If WeChat 4.x keeps blocking wx-cli, open the target chat in desktop WeChat, scroll to the first date you need, "
+        f"use {shortcut}, then let prepare_wechat_digest.py parse the clipboard transcript into the same analysis bundle.",
+    )
+
+
 def build_report(project_root: Path, platform_override: str | None = None) -> dict[str, Any]:
     state = inspect_payload(project_root)
     resolved = state["state"]
@@ -507,6 +525,7 @@ def build_report(project_root: Path, platform_override: str | None = None) -> di
         report["next_steps"].extend(
             recovery_steps_for_unreadable_sessions(platform_id, wx_bin, wx_cli_state)
         )
+        report["next_steps"].append(manual_fallback_step(platform_id))
 
     if not state.get("config_path") and not state.get("baoyu_extend_path"):
         report["next_steps"].append(

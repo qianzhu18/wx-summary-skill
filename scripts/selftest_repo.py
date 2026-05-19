@@ -18,6 +18,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from bootstrap_skill import bootstrap_report
 from check_wechat_env import build_report
 from newspaper_bridge import build_render_payload
+from prepare_wechat_digest import build_bundle, parse_manual_transcript
 from render_web_digest import render_html
 from skill_state import DEFAULT_WEB_STYLE, inspect_payload
 
@@ -240,6 +241,89 @@ def test_windows_last_mile_diagnostics() -> None:
             any(step["title"] == "Inspect WeChat data-root hints" for step in report["next_steps"]),
             "Windows doctor should suggest checking %APPDATA% xwechat ini hints",
         )
+        assert_true(
+            any(step["title"].startswith("Fallback: import a copied transcript") for step in report["next_steps"]),
+            "Windows doctor should expose the manual transcript fallback when wx sessions stay unreadable",
+        )
+
+
+def test_manual_transcript_parser_supports_copy_paste_layout() -> None:
+    transcript = """
+2026年5月17日 星期六
+千逐 09:41
+先看 4.x 的 fallback
+直接走人工复制
+
+马宇航 湖科大(小马哥） 09:43
+[图片]
+
+2026年5月18日 周日
+下午 1:05 管家
+[链接] OpenAI 文档
+""".strip()
+    history_payload, stats_payload = parse_manual_transcript(
+        transcript,
+        "IGN AI | 洋来",
+        "manual-ign-ai-yanglai",
+        "2026-05-17",
+        "2026-05-18",
+    )
+
+    assert_true(len(history_payload) == 3, "Manual transcript parser should recover three messages from the sample transcript")
+    assert_true(history_payload[0]["sender"] == "千逐", "Parser should recover sender names from sender-first headers")
+    assert_true(
+        history_payload[0]["content"] == "先看 4.x 的 fallback\n直接走人工复制",
+        "Parser should preserve multiline text messages",
+    )
+    assert_true(history_payload[1]["type"] == "图片", "Parser should recognize media placeholders")
+    assert_true(
+        history_payload[2]["time"] == "2026-05-18 13:05",
+        "Parser should normalize Chinese afternoon timestamps into 24-hour time",
+    )
+    assert_true(stats_payload["total"] == 3, "Manual transcript stats should track the parsed message count")
+    assert_true(stats_payload["source"] == "manual-transcript", "Manual transcript stats should expose their source")
+
+
+def test_prepare_bundle_accepts_file_source() -> None:
+    transcript = """
+2026-05-17
+千逐 09:41
+先看 4.x 的 fallback
+
+09:52 管家
+[链接] OpenAI 文档
+""".strip()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        transcript_path = root / "transcript.txt"
+        transcript_path.write_text(transcript, encoding="utf-8")
+        result = build_bundle(
+            SimpleNamespace(
+                chat="IGN AI | 洋来",
+                since="2026-05-17",
+                until="2026-05-17",
+                data_root=str(root / "wechat"),
+                limit=5000,
+                source="file",
+                input_file=str(transcript_path),
+                group_id="43663749608@chatroom",
+            )
+        )
+
+        raw_messages_path = Path(result["raw_messages_json"])
+        raw_stats_path = Path(result["raw_stats_json"])
+        raw_transcript_path = Path(result["raw_transcript_txt"])
+        analysis_path = Path(result["analysis_json"])
+        briefing_path = Path(result["briefing_md"])
+
+        assert_true(raw_messages_path.exists(), "File-source prepare_bundle should write raw messages")
+        assert_true(raw_stats_path.exists(), "File-source prepare_bundle should write raw stats")
+        assert_true(raw_transcript_path.exists(), "File-source prepare_bundle should preserve the original transcript text")
+        assert_true(analysis_path.exists(), "File-source prepare_bundle should write analysis JSON")
+        assert_true(briefing_path.exists(), "File-source prepare_bundle should write a briefing markdown file")
+        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        assert_true(analysis["total_messages"] == 2, "File-source bundle should preserve the parsed message count")
+        assert_true(analysis["source"] == "manual-transcript", "Analysis should mark manual transcript origin")
 
 
 def test_default_web_style_prefers_newspaper_mode() -> None:
@@ -364,6 +448,8 @@ def main() -> None:
     test_platform_specific_recovery_steps()
     test_bootstrap_creates_config_when_missing()
     test_windows_last_mile_diagnostics()
+    test_manual_transcript_parser_supports_copy_paste_layout()
+    test_prepare_bundle_accepts_file_source()
     test_default_web_style_prefers_newspaper_mode()
     test_render_html_uses_newspaper_layout()
     test_render_payload_supports_optional_branding()
