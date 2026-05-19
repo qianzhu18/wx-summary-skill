@@ -6,7 +6,7 @@ Use this mode when the user wants a local HTML newspaper page instead of a text-
 
 - style id: `people-daily-v1`
 
-This mode reuses the local analysis bundle and a reviewed `summary.json`, then renders a static local page in a People’s Daily inspired newspaper layout. It does not publish anything.
+This mode reuses the local analysis bundle and a reviewed `summary.json`, then renders a static local page through the multi-page newspaper pipeline used by the local `group-daily-newspaper` workflow. It does not publish anything.
 
 ## Workflow
 
@@ -27,10 +27,17 @@ The renderer writes:
 
 - `<group_dir>/<since>_<until>.web.md`
 - `<group_dir>/summary.json`
+- `<group_dir>/newspaper/<since>_<until>/story.json`
+- `<group_dir>/newspaper/<since>_<until>/layout-plan.json`
 - `<group_dir>/site/index.html`
 - `<group_dir>/dist/index.html`
 - `<group_dir>/history.json`
 - `<group_dir>/history-digests.jsonl`
+
+Optional group branding:
+
+- Put a square image at `<group_dir>/branding/site-icon.png` (or `.jpg` / `.jpeg` / `.webp`) to generate favicon assets for the rendered site.
+- Add `<group_dir>/branding/site-branding.json` to set `theme_color`, `icon_public_url`, `apple_touch_icon_public_url`, or `og_image_public_url` when you want explicit meta tags instead of only the generated local assets.
 
 ## Content rules
 

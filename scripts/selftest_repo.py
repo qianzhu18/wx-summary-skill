@@ -10,11 +10,14 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
+from PIL import Image
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from bootstrap_skill import bootstrap_report
 from check_wechat_env import build_report
+from newspaper_bridge import build_render_payload
 from render_web_digest import render_html
 from skill_state import DEFAULT_WEB_STYLE, inspect_payload
 
@@ -199,9 +202,13 @@ def test_windows_last_mile_diagnostics() -> None:
 
         original_path = os.environ.get("PATH", "")
         original_home = os.environ.get("HOME")
+        original_userprofile = os.environ.get("USERPROFILE")
         original_appdata = os.environ.get("APPDATA")
         os.environ["PATH"] = str(bin_dir) + os.pathsep + original_path
         os.environ["HOME"] = str(home_dir)
+        # On real Windows runners, Path.home() resolves from USERPROFILE/HOMEDRIVE/HOMEPATH,
+        # not HOME, so the selftest must override USERPROFILE to point at the temp fixture.
+        os.environ["USERPROFILE"] = str(home_dir)
         os.environ["APPDATA"] = str(appdata_dir)
         try:
             report = build_report(root, "win32")
@@ -211,6 +218,10 @@ def test_windows_last_mile_diagnostics() -> None:
                 os.environ.pop("HOME", None)
             else:
                 os.environ["HOME"] = original_home
+            if original_userprofile is None:
+                os.environ.pop("USERPROFILE", None)
+            else:
+                os.environ["USERPROFILE"] = original_userprofile
             if original_appdata is None:
                 os.environ.pop("APPDATA", None)
             else:
@@ -279,13 +290,72 @@ def test_render_html_uses_newspaper_layout() -> None:
         "date_range": {"since": "2026-05-12", "until": "2026-05-18"},
     }
     html = render_html(summary, analysis)
-    assert_true("群聊日报" in html, "Rendered HTML should use the newspaper masthead")
+    assert_true("头 版 要 闻" in html, "Rendered HTML should render the newspaper front page")
     assert_true(
-        "People Daily Inspired Web Edition" in html,
-        "Rendered HTML should advertise the newspaper-style webpage mode",
+        "第 1 版 / 共 4 版" in html,
+        "Rendered HTML should expose multi-page newspaper page furniture",
     )
     assert_true("群聊信息报 / Chat Digest" not in html, "Legacy card-digest masthead should be gone")
-    assert_true("本版主线" in html, "Rendered HTML should expose the newspaper story rail")
+    assert_true("APPENDIX" in html, "Rendered HTML should include the appendix page from the newspaper layout")
+
+
+def test_render_payload_supports_optional_branding() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        group_dir = root / "wechat" / "example-group"
+        branding_dir = group_dir / "branding"
+        run_dir = group_dir / "newspaper" / "preview"
+        branding_dir.mkdir(parents=True, exist_ok=True)
+
+        Image.new("RGB", (256, 256), "#24406a").save(branding_dir / "site-icon.png", format="PNG")
+        (branding_dir / "site-branding.json").write_text(
+            json.dumps({"theme_color": "#24406a"}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        summary = {
+            "group_name": "IGN AI | 洋来",
+            "group_id": "43663749608@chatroom",
+            "time_range": "2026-05-12 ~ 2026-05-18",
+            "headline": "工具混战里长出一张学生 Builder 前台",
+            "subheadline": "这周讨论主要围绕登录、预算、工具栈和线下活动展开。",
+            "opening": "这一版把群里最有代表性的几条工作流线索压成头版 lead，保留讨论节奏，也保留判断。",
+            "period_in_one_line": "这一周的重心不是追新模型，而是把可用工作流稳下来。",
+            "main_threads": [{"title": "工具判断", "summary": "把工具放回真实场景里比较。"}],
+            "people": [{"name": "千逐", "tag": "主持判断", "desc": "多次把抽象争论压回真实场景。"}],
+            "timeline": [{"date": "05-15", "label": "周五", "bullets": ["集中讨论登录、会话和客户端迁移。"]}],
+            "quotes": [{"text": "先按任务选，不要先按信仰选。", "who": "千逐"}],
+            "links": [{"title": "Codex", "note": "作为开发协作主场景不断被提及。"}],
+            "next_actions": ["下一版可以继续追线下活动和设备预算这两条线。"],
+        }
+        analysis = {
+            "total_messages": 128,
+            "active_senders": 19,
+            "char_count": 11243,
+            "top_senders": [{"name": "千逐", "count": 24}, {"name": "管家", "count": 18}],
+            "peak_day": {"date": "2026-05-15", "count": 41},
+            "last_message_time": "2026-05-18 22:11",
+            "date_range": {"since": "2026-05-12", "until": "2026-05-18"},
+        }
+
+        result = build_render_payload(summary, analysis, group_dir, run_dir)
+        html = Path(result["site_index"]).read_text(encoding="utf-8")
+        dist_html = Path(result["dist_index"]).read_text(encoding="utf-8")
+
+        assert_true('name="theme-color" content="#24406a"' in html, "Branding should inject theme-color into site HTML")
+        assert_true('href="./favicon.ico"' in html, "Branding should inject favicon link into site HTML")
+        assert_true('href="./apple-touch-icon.png"' in html, "Branding should inject apple-touch icon into site HTML")
+        assert_true('href="./favicon.ico"' in dist_html, "Dist HTML should keep the injected favicon links")
+
+        for rel_path in (
+            "favicon.ico",
+            "favicon-16x16.png",
+            "favicon-32x32.png",
+            "apple-touch-icon.png",
+            "site-icon-512.png",
+        ):
+            assert_true((run_dir / "site" / rel_path).exists(), f"Site output should include {rel_path}")
+            assert_true((run_dir / "dist" / rel_path).exists(), f"Dist output should include {rel_path}")
 
 
 def main() -> None:
@@ -296,6 +366,7 @@ def main() -> None:
     test_windows_last_mile_diagnostics()
     test_default_web_style_prefers_newspaper_mode()
     test_render_html_uses_newspaper_layout()
+    test_render_payload_supports_optional_branding()
     print("selftest_repo.py: all checks passed")
 
 

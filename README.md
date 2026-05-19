@@ -271,11 +271,15 @@ doctor 会检查：
 `render_web_digest.py` 会生成：
 
 - `<group_dir>/<since>_<until>.web.md`
+- `<group_dir>/newspaper/<since>_<until>/story.json`
+- `<group_dir>/newspaper/<since>_<until>/layout-plan.json`
 - `<group_dir>/site/index.html`
 - `<group_dir>/dist/index.html`
 - `<group_dir>/history.json`
 
-也就是说，你不仅拿到一个摘要结果，还能拿到一组本地证据材料，方便复查和二次加工。
+网页模式现在会走同一套多版报纸 renderer，所以你拿到的不只是摘要结果，还有可复查的 story/layout 中间产物和最终本地静态站点。
+
+如果群目录下存在 `branding/site-icon.png`、`branding/site-icon.jpg` 之类的图标源文件，renderer 还会顺手生成 favicon、apple-touch icon，并把相应 `<link rel="icon">` 标签写进页面 head。可选的 `branding/site-branding.json` 还可以补 `theme_color`、`icon_public_url`、`apple_touch_icon_public_url`、`og_image_public_url`。
 
 ## 本地配置和状态
 
