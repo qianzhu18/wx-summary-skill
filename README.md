@@ -97,7 +97,15 @@ git clone https://github.com/qianzhu18/wx-summary-skill.git "$HOME\.codex\skills
 Set-Location "$HOME\.codex\skills\wx-summary-skill"
 ```
 
-### 2. 安装 `wx-cli`
+### 2. 安装 Python 依赖
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+如果你的机器上 `python` 就是 Python 3，也可以直接用 `python -m pip install -r requirements.txt`。Windows PowerShell 也可以用 `py -3 -m pip install -r requirements.txt`。
+
+### 3. 安装 `wx-cli`
 
 选一种方式即可。
 
@@ -119,7 +127,7 @@ Windows PowerShell 安装脚本：
 irm https://raw.githubusercontent.com/jackwener/wx-cli/main/install.ps1 | iex
 ```
 
-### 3. 在本机完成微信 CLI 初始化
+### 4. 在本机完成微信 CLI 初始化
 
 这一步的目标不是“跑完某个项目脚本”，而是让你的本机微信环境真的能被 `wx-cli` 正常读取。
 
@@ -162,7 +170,7 @@ wx sessions --json
 - macOS 如果微信不在 `/Applications/WeChat.app`，请替换成你的实际路径
 - Windows / Linux 请先确保桌面微信已打开并完成登录
 
-### 4. 跑 bootstrap
+### 5. 跑 bootstrap
 
 macOS / Linux:
 
