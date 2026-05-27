@@ -319,11 +319,24 @@ def main() -> None:
         # Render HTML
         if render_script:
             out_file = dist_dir / f"ignai-daily-{date_str}.html"
+            # Find raw messages file containing this date
+            msgs_file = None
+            for mf in sorted(raw_dir.glob("*.messages.json")):
+                try:
+                    data = json.loads(mf.read_text(encoding="utf-8"))
+                    if any(m.get("time", "").startswith(date_str) for m in data):
+                        msgs_file = mf
+                        break
+                except Exception:
+                    pass
             try:
+                cmd = [sys.executable, render_script,
+                       "--analysis", str(analysis_file),
+                       "-o", str(out_file)]
+                if msgs_file:
+                    cmd.extend(["--messages", str(msgs_file)])
                 result = subprocess.run(
-                    [sys.executable, render_script,
-                     "--analysis", str(analysis_file),
-                     "-o", str(out_file)],
+                    cmd,
                     capture_output=True, text=True, timeout=30,
                 )
                 if result.returncode == 0:

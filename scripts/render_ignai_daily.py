@@ -8,18 +8,18 @@ Generates a self-contained HTML page matching qianzhu.online community aesthetic
   - Sections: 群聊总结 → 热点 → 需求与链接人 → 资源 → 活跃之星 → 词云
 
 Usage:
-  python render_ignai_daily.py --summary summary.json --analysis analysis.json
-  python render_ignai_daily.py --analysis analysis.json  # auto-generates summary
+  python render_ignai_daily.py --analysis analysis.json --messages messages.json
+  python render_ignai_daily.py --analysis analysis.json  # uses quote_candidates from analysis
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import html as html_mod
 import json
-import math
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -41,45 +41,300 @@ SIGNAL_DIM = "rgba(93, 169, 255, 0.15)"
 MAX_W = "960px"
 RADIUS = "12px"
 
+# ── AI/Tech keywords for topic extraction ─────────────────────────────────
+TOPIC_KEYWORDS = [
+    "OpenAI", "Claude", "Gemini", "GPT", "API", "Agent", "token", "Codex",
+    "Kimi", "DeepSeek", "Qwen", "通义", "千问", "Llama", "Mistral",
+    "Cursor", "Copilot", "Windsurf", "Replit", "v0", "Bolt",
+    "Midjourney", "SD", "Stable Diffusion", "DALL-E", "Sora",
+    "LangChain", "Dify", "Coze", "扣子", "n8n",
+    "模型", "大模型", "LLM", "RAG", "向量", "embedding",
+    "部署", "服务器", "云", "阿里云", "腾讯云", "AWS",
+    "黑客松", "hackathon", "比赛", "竞赛",
+    "skill", "workflow", "自动化", "机器人",
+    "Qwen3", "SkyClaw", "OpenClaw", "Prism",
+]
+
 
 def e(text: str) -> str:
     return html_mod.escape(str(text))
+
+
+def clean_msg(text: str) -> str:
+    """Clean message content for display."""
+    if not text:
+        return ""
+    # Decode HTML entities first
+    text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&quot;", '"')
+    # Remove XML/image/location data
+    if any(text.startswith(p) for p in ("<?xml", "wxid_", "<msg>", "<xml")):
+        return ""
+    if "<img aeskey=" in text or "<location " in text:
+        return ""
+    # Remove [Broken] markers
+    text = re.sub(r"\[Broken\]", "", text)
+    # Remove [动画表情] markers
+    text = re.sub(r"\[动画表情\]", "", text)
+    # Remove excessive whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+    # Skip if too short after cleaning
+    if len(text) < 10:
+        return ""
+    # Truncate if too long
+    if len(text) > 200:
+        text = text[:197] + "…"
+    return text
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Render IGN AI community daily report")
     p.add_argument("--summary", help="Path to summary.json")
     p.add_argument("--analysis", required=True, help="Path to analysis.json")
-    p.add_argument("--output", "-o", help="Output HTML path (default: dist/ignai-daily.html)")
-    p.add_argument("--logo", help="Path to community logo image (base64 embedded)")
+    p.add_argument("--messages", help="Path to raw messages.json (for real quotes)")
+    p.add_argument("--output", "-o", help="Output HTML path")
+    p.add_argument("--logo", help="Path to community logo image")
     return p.parse_args()
 
 
-def read_json(path: Path) -> dict[str, Any]:
+def read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def load_messages(messages_path: str | None, analysis: dict, date_str: str) -> list[dict]:
+    """Load messages from file or extract from analysis quote_candidates."""
+    if messages_path:
+        msgs = read_json(Path(messages_path))
+        # Filter to target date
+        return [m for m in msgs if m.get("time", "").startswith(date_str)]
+    # Fallback: use quote_candidates from analysis
+    return analysis.get("quote_candidates", [])
+
+
+def extract_topics_from_messages(messages: list[dict], analysis: dict) -> list[dict]:
+    """Extract hot topics with real quotes from messages."""
+    # Group messages by keyword
+    keyword_msgs: dict[str, list[dict]] = defaultdict(list)
+    kw_hits = analysis.get("keyword_hits", [])
+    known_keywords = {kw["keyword"] for kw in kw_hits}
+
+    for msg in messages:
+        content = msg.get("content", "") or msg.get("text", "")
+        sender = msg.get("sender", msg.get("who", ""))
+        time_str = msg.get("time", "")
+        if not content or not sender:
+            continue
+        cleaned = clean_msg(content)
+        if not cleaned or len(cleaned) < 15:
+            continue
+        content_lower = content.lower()
+        for kw in known_keywords:
+            if kw.lower() in content_lower:
+                keyword_msgs[kw].append({
+                    "text": cleaned,
+                    "sender": sender,
+                    "time": time_str,
+                })
+
+    # Assign unique quotes to each topic (no reuse)
+    used_quotes: set[str] = set()
+    topics = []
+
+    for kw_hit in kw_hits[:6]:
+        keyword = kw_hit["keyword"]
+        count = kw_hit["count"]
+        msgs_for_kw = keyword_msgs.get(keyword, [])
+
+        # Pick best unused quotes
+        good_quotes = [m for m in msgs_for_kw if m["text"][:30] not in used_quotes]
+        good_quotes.sort(key=lambda m: len(m["text"]), reverse=True)
+
+        if good_quotes:
+            quote = good_quotes[0]
+            used_quotes.add(quote["text"][:30])
+            summary = f"来自 {quote['sender']} 的讨论"
+            insight = quote["text"][:120]
+            attribution = quote["sender"]
+        else:
+            summary = f"群内共 {count} 次提及"
+            insight = ""
+            attribution = ""
+
+        topics.append({
+            "keyword": keyword,
+            "count": count,
+            "title": f"{keyword} 相关讨论",
+            "summary": summary,
+            "insight": insight,
+            "attribution": attribution,
+            "quotes": good_quotes[:2],
+        })
+
+    return topics
+
+
+def extract_topics_from_analysis(analysis: dict, summary: dict) -> list[dict]:
+    """Fallback: extract topics from analysis data when no raw messages."""
+    topics = []
+    kw_hits = analysis.get("keyword_hits", [])
+    quote_candidates = analysis.get("quote_candidates", [])
+
+    for kw_hit in kw_hits[:6]:
+        keyword = kw_hit["keyword"]
+        count = kw_hit["count"]
+
+        # Find relevant quotes
+        relevant = []
+        for q in quote_candidates:
+            text = q.get("text", q.get("content", ""))
+            if keyword.lower() in text.lower():
+                cleaned = clean_msg(text)
+                if cleaned and len(cleaned) > 15:
+                    relevant.append({
+                        "text": cleaned,
+                        "sender": q.get("sender", q.get("who", "")),
+                        "time": q.get("time", ""),
+                    })
+
+        if relevant:
+            quote = relevant[0]
+            insight = quote["text"][:120]
+            attribution = quote["sender"]
+        else:
+            insight = ""
+            attribution = ""
+
+        topics.append({
+            "keyword": keyword,
+            "count": count,
+            "title": f"{keyword} 相关讨论",
+            "summary": f"群内共 {count} 次提及",
+            "insight": insight,
+            "attribution": attribution,
+            "quotes": relevant[:2],
+        })
+
+    return topics
+
+
+def extract_needs_from_messages(messages: list[dict]) -> list[dict]:
+    """Extract user needs from real messages."""
+    need_keywords = ["需求", "求助", "怎么", "哪里", "有没有", "推荐", "找", "帮", "需要", "问题", "想要", "求", "有吗"]
+    needs = []
+
+    for msg in messages:
+        content = msg.get("content", "") or msg.get("text", "")
+        sender = msg.get("sender", msg.get("who", ""))
+        if not content or not sender:
+            continue
+
+        cleaned = clean_msg(content)
+        if not cleaned or len(cleaned) < 10:
+            continue
+
+        # Check if it's a need/help request
+        if any(kw in content for kw in need_keywords):
+            # Skip bot responses
+            if sender in ("管家",):
+                continue
+            needs.append({
+                "text": cleaned[:120],
+                "from": sender,
+                "connector": "",
+            })
+
+    return needs[:5]
+
+
+def extract_resources_from_messages(messages: list[dict]) -> list[dict]:
+    """Extract shared links and resources from messages."""
+    resources = []
+    seen_urls = set()
+
+    for msg in messages:
+        content = msg.get("content", "") or msg.get("text", "")
+        sender = msg.get("sender", msg.get("who", ""))
+        if not content:
+            continue
+
+        # Extract URLs
+        urls = re.findall(r'https?://[^\s<>"\']+', content)
+        for url in urls:
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+
+            # Try to extract title from surrounding text
+            title = url[:80]
+            # Look for text before the URL
+            before = content[:content.index(url)].strip()
+            if before and len(before) > 5:
+                title = before[-60:].strip()
+
+            resources.append({
+                "title": title,
+                "url": url,
+                "note": f"来自 {sender}" if sender else "",
+            })
+
+    # Also check analysis frequent_links
+    return resources[:8]
+
+
+def extract_quotes_from_messages(messages: list[dict]) -> list[dict]:
+    """Extract notable quotes from messages."""
+    quotes = []
+    seen = set()
+
+    for msg in messages:
+        content = msg.get("content", "") or msg.get("text", "")
+        sender = msg.get("sender", msg.get("who", ""))
+        if not content or not sender:
+            continue
+
+        cleaned = clean_msg(content)
+        if not cleaned or len(cleaned) < 20:
+            continue
+
+        # Skip if we've seen similar text
+        key = cleaned[:30]
+        if key in seen:
+            continue
+        seen.add(key)
+
+        # Skip bot/system messages and merged chat records
+        if sender in ("管家",):
+            continue
+        if cleaned.startswith("[合并聊天记录]"):
+            continue
+
+        quotes.append({
+            "text": cleaned[:150],
+            "who": sender,
+        })
+
+    # Sort by length (prefer longer, more substantive quotes)
+    quotes.sort(key=lambda q: len(q["text"]), reverse=True)
+    return quotes[:6]
+
+
 def auto_summary(analysis: dict[str, Any]) -> dict[str, Any]:
-    """Generate a minimal summary from analysis data when summary.json is missing."""
+    """Generate a minimal summary from analysis data."""
     grp = analysis.get("group_name", "IGN AI")
     dr = analysis.get("date_range", {})
     since = dr.get("since", "")
     until = dr.get("until", "")
     time_range = f"{since} ~ {until}" if since != until else since
 
-    top = analysis.get("top_senders", [])
-    top_names = [t.get("name", "") for t in top[:5]]
-
     kw = analysis.get("keyword_hits", [])
-    kw_str = "、".join(k.get("keyword", "") for k in kw[:5]) if kw else "AI工具"
+    kw_str = "、".join(k.get("keyword", "") for k in kw[:3]) if kw else "AI工具"
 
     return {
         "group_name": grp,
         "group_id": analysis.get("group_id", ""),
         "time_range": time_range,
-        "headline": f"{since} 群聊精华：{kw_str} 成焦点",
+        "headline": f"{since} 群聊精华",
         "subheadline": f"当日共 {analysis.get('total_messages', 0)} 条消息，{analysis.get('active_senders', 0)} 人参与讨论",
-        "opening": f"{grp} 在 {time_range} 内产生了 {analysis.get('total_messages', 0)} 条消息，{analysis.get('active_senders', 0)} 位成员参与。讨论围绕 {kw_str} 等话题展开。",
+        "opening": f"{grp} 在 {time_range} 内产生了 {analysis.get('total_messages', 0)} 条消息。",
         "main_threads": [],
         "people": [],
         "timeline": [],
@@ -87,164 +342,6 @@ def auto_summary(analysis: dict[str, Any]) -> dict[str, Any]:
         "links": [],
         "next_actions": [],
     }
-
-
-# ── Content extraction helpers ────────────────────────────────────────────
-
-def extract_hot_topics(analysis: dict[str, Any], summary: dict[str, Any]) -> list[dict]:
-    """Extract hot topics from keyword hits and main threads."""
-    topics = []
-    kw_hits = analysis.get("keyword_hits", [])
-    threads = summary.get("main_threads", [])
-
-    # From keyword hits
-    for kw in kw_hits[:8]:
-        keyword = kw.get("keyword", "")
-        count = kw.get("count", 0)
-        # Find matching thread
-        matched_thread = None
-        for t in threads:
-            if keyword.lower() in t.get("title", "").lower() or keyword.lower() in t.get("summary", "").lower():
-                matched_thread = t
-                break
-        topics.append({
-            "keyword": keyword,
-            "count": count,
-            "title": matched_thread["title"] if matched_thread else f"{keyword} 相关讨论",
-            "summary": matched_thread["summary"] if matched_thread else f"群内围绕 {keyword} 的讨论共出现 {count} 次",
-            "insight": "",
-        })
-
-    # Fill remaining from threads if needed
-    if len(topics) < 4:
-        for t in threads:
-            if len(topics) >= 6:
-                break
-            title = t.get("title", "")
-            if not any(title.lower().count(tp["keyword"].lower()) for tp in topics):
-                topics.append({
-                    "keyword": title[:6],
-                    "count": 0,
-                    "title": title,
-                    "summary": t.get("summary", ""),
-                    "insight": "",
-                })
-
-    return topics[:6]
-
-
-def extract_needs(analysis: dict[str, Any], summary: dict[str, Any]) -> list[dict]:
-    """Extract user needs and potential connectors."""
-    needs = []
-    quotes = summary.get("quotes", [])
-    briefing = analysis.get("briefing", "")
-
-    # Look for demand/help signals in quotes
-    need_keywords = ["需求", "求助", "怎么", "哪里", "有没有", "推荐", "找", "帮", "需要", "问题"]
-    for q in quotes:
-        text = q.get("text", "")
-        who = q.get("who", "")
-        if any(kw in text for kw in need_keywords):
-            needs.append({
-                "text": text[:120],
-                "from": who,
-                "connector": "",
-            })
-
-    # From demand data if available
-    demand_data = analysis.get("demand_signals", [])
-    for d in demand_data[:3]:
-        needs.append({
-            "text": d.get("text", d.get("demand", ""))[:120],
-            "from": d.get("from", ""),
-            "connector": d.get("connector", ""),
-        })
-
-    return needs[:5]
-
-
-def extract_resources(summary: dict[str, Any], analysis: dict[str, Any]) -> list[dict]:
-    """Extract shared links and resources."""
-    resources = []
-    links = summary.get("links", [])
-    freq_links = analysis.get("frequent_links", [])
-
-    for link in links:
-        resources.append({
-            "title": link.get("title", ""),
-            "url": link.get("url", ""),
-            "note": link.get("note", ""),
-        })
-
-    for fl in freq_links:
-        title = fl.get("title", fl.get("url", ""))
-        if not any(title in r["title"] for r in resources):
-            resources.append({
-                "title": title,
-                "url": fl.get("url", ""),
-                "note": f"被提及 {fl.get('count', 1)} 次",
-            })
-
-    return resources[:8]
-
-
-def extract_active_stars(analysis: dict[str, Any]) -> list[dict]:
-    """Extract top active members with stats."""
-    stars = []
-    top_senders = analysis.get("top_senders", [])
-    for ts in top_senders[:10]:
-        name = ts.get("name", "未知")
-        count = ts.get("count", 0)
-        stars.append({
-            "name": name,
-            "count": count,
-            "initial": name[0] if name else "?",
-        })
-    return stars
-
-
-def extract_word_cloud(analysis: dict[str, Any]) -> list[dict]:
-    """Extract keyword frequencies for word cloud visualization."""
-    words = []
-    kw_hits = analysis.get("keyword_hits", [])
-    for kw in kw_hits[:20]:
-        words.append({
-            "word": kw.get("keyword", ""),
-            "count": kw.get("count", 1),
-        })
-
-    # Normalize weights for visual sizing
-    if words:
-        max_count = max(w["count"] for w in words)
-        for w in words:
-            w["weight"] = max(0.5, w["count"] / max_count)
-
-    return words
-
-
-def extract_quotes(summary: dict[str, Any], analysis: dict[str, Any]) -> list[dict]:
-    """Extract notable quotes."""
-    quotes = []
-    for q in summary.get("quotes", []):
-        text = q.get("text", "")
-        if len(text) > 10 and not text.startswith("wxid_"):
-            quotes.append({
-                "text": text[:150],
-                "who": q.get("who", ""),
-            })
-
-    # From quote candidates
-    qc = analysis.get("quote_candidates", [])
-    for q in qc:
-        text = q.get("text", q.get("content", ""))
-        if len(text) > 10 and not text.startswith("wxid_"):
-            if not any(text[:30] in eq["text"] for eq in quotes):
-                quotes.append({
-                    "text": text[:150],
-                    "who": q.get("sender", q.get("who", "")),
-                })
-
-    return quotes[:6]
 
 
 # ── HTML rendering ────────────────────────────────────────────────────────
@@ -280,7 +377,6 @@ body {{
 a {{ color: var(--accent); text-decoration: none; }}
 a:hover {{ color: var(--accent-hover); }}
 
-/* ── Header ─────────────────────────────────────────────── */
 .header {{
   background: linear-gradient(180deg, {BG} 0%, {BG2} 100%);
   border-bottom: 1px solid var(--line);
@@ -327,7 +423,6 @@ a:hover {{ color: var(--accent-hover); }}
   display: inline-block;
 }}
 
-/* ── Hero ────────────────────────────────────────────────── */
 .hero {{
   padding: 56px 24px 40px;
   background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249,115,22,0.08) 0%, transparent 70%);
@@ -369,8 +464,6 @@ a:hover {{ color: var(--accent-hover); }}
   max-width: 640px;
   line-height: 1.7;
 }}
-
-/* ── Stats row ──────────────────────────────────────────── */
 .stats-row {{
   display: flex;
   gap: 32px;
@@ -399,7 +492,6 @@ a:hover {{ color: var(--accent-hover); }}
   letter-spacing: 0.08em;
 }}
 
-/* ── Section ────────────────────────────────────────────── */
 .section {{
   max-width: var(--max);
   margin: 0 auto;
@@ -433,55 +525,12 @@ a:hover {{ color: var(--accent-hover); }}
   max-width: 640px;
 }}
 
-/* ── Cards ──────────────────────────────────────────────── */
 .card-grid {{
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
 }}
-.card {{
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 20px;
-  transition: border-color 0.2s, background 0.2s;
-}}
-.card:hover {{
-  border-color: rgba(249,115,22,0.3);
-  background: var(--panel-hover);
-}}
-.card-title {{
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}}
-.card-title .keyword-tag {{
-  font-size: 11px;
-  color: var(--accent);
-  background: var(--accent-dim);
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-weight: 600;
-}}
-.card-body {{
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.7;
-}}
-.card-body .quote {{
-  border-left: 2px solid var(--accent);
-  padding-left: 12px;
-  margin-top: 8px;
-  font-style: italic;
-  color: var(--ink);
-  font-size: 13px;
-}}
 
-/* ── Hot topics ─────────────────────────────────────────── */
 .topic-card {{
   background: var(--panel);
   border: 1px solid var(--line);
@@ -529,16 +578,21 @@ a:hover {{ color: var(--accent-hover); }}
   font-size: 13px;
   color: var(--ink);
   font-style: italic;
+  line-height: 1.6;
 }}
 .topic-quote .attribution {{
   display: block;
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: 11px;
   color: var(--muted);
   font-style: normal;
 }}
+.topic-extra {{
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted2);
+}}
 
-/* ── Needs & connectors ─────────────────────────────────── */
 .need-item {{
   background: var(--panel);
   border: 1px solid var(--line);
@@ -559,9 +613,7 @@ a:hover {{ color: var(--accent-hover); }}
   font-size: 16px;
   flex-shrink: 0;
 }}
-.need-content {{
-  flex: 1;
-}}
+.need-content {{ flex: 1; }}
 .need-text {{
   font-size: 14px;
   color: var(--ink);
@@ -574,11 +626,8 @@ a:hover {{ color: var(--accent-hover); }}
   display: flex;
   gap: 16px;
 }}
-.need-meta .connector {{
-  color: var(--signal);
-}}
+.need-meta .connector {{ color: var(--signal); }}
 
-/* ── Resource list ──────────────────────────────────────── */
 .resource-item {{
   background: var(--panel);
   border: 1px solid var(--line);
@@ -589,9 +638,7 @@ a:hover {{ color: var(--accent-hover); }}
   gap: 12px;
   transition: border-color 0.2s;
 }}
-.resource-item:hover {{
-  border-color: rgba(249,115,22,0.3);
-}}
+.resource-item:hover {{ border-color: rgba(249,115,22,0.3); }}
 .resource-icon {{
   width: 32px;
   height: 32px;
@@ -603,10 +650,7 @@ a:hover {{ color: var(--accent-hover); }}
   font-size: 14px;
   flex-shrink: 0;
 }}
-.resource-info {{
-  flex: 1;
-  min-width: 0;
-}}
+.resource-info {{ flex: 1; min-width: 0; }}
 .resource-title {{
   font-size: 14px;
   font-weight: 600;
@@ -615,12 +659,8 @@ a:hover {{ color: var(--accent-hover); }}
   overflow: hidden;
   text-overflow: ellipsis;
 }}
-.resource-note {{
-  font-size: 12px;
-  color: var(--muted);
-}}
+.resource-note {{ font-size: 12px; color: var(--muted); }}
 
-/* ── Active stars ───────────────────────────────────────── */
 .stars-grid {{
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -636,9 +676,7 @@ a:hover {{ color: var(--accent-hover); }}
   gap: 12px;
   transition: border-color 0.2s;
 }}
-.star-card:hover {{
-  border-color: rgba(249,115,22,0.3);
-}}
+.star-card:hover {{ border-color: rgba(249,115,22,0.3); }}
 .star-avatar {{
   width: 40px;
   height: 40px;
@@ -652,10 +690,7 @@ a:hover {{ color: var(--accent-hover); }}
   color: var(--accent);
   flex-shrink: 0;
 }}
-.star-info {{
-  flex: 1;
-  min-width: 0;
-}}
+.star-info {{ flex: 1; min-width: 0; }}
 .star-name {{
   font-size: 13px;
   font-weight: 600;
@@ -664,10 +699,7 @@ a:hover {{ color: var(--accent-hover); }}
   overflow: hidden;
   text-overflow: ellipsis;
 }}
-.star-count {{
-  font-size: 11px;
-  color: var(--muted);
-}}
+.star-count {{ font-size: 11px; color: var(--muted); }}
 .star-bar {{
   height: 3px;
   background: var(--line);
@@ -681,7 +713,6 @@ a:hover {{ color: var(--accent-hover); }}
   background: linear-gradient(90deg, var(--accent), var(--signal));
 }}
 
-/* ── Word cloud ─────────────────────────────────────────── */
 .wordcloud {{
   display: flex;
   flex-wrap: wrap;
@@ -698,11 +729,8 @@ a:hover {{ color: var(--accent-hover); }}
   white-space: nowrap;
   transition: transform 0.2s;
 }}
-.word-tag:hover {{
-  transform: scale(1.05);
-}}
+.word-tag:hover {{ transform: scale(1.05); }}
 
-/* ── Quotes wall ────────────────────────────────────────── */
 .quote-wall {{
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -716,7 +744,7 @@ a:hover {{ color: var(--accent-hover); }}
   position: relative;
 }}
 .quote-card::before {{
-  content: "“";
+  content: "\\201C";
   position: absolute;
   top: 12px;
   left: 16px;
@@ -739,7 +767,6 @@ a:hover {{ color: var(--accent-hover); }}
   padding-left: 24px;
 }}
 
-/* ── Footer ─────────────────────────────────────────────── */
 .footer {{
   max-width: var(--max);
   margin: 0 auto;
@@ -750,7 +777,6 @@ a:hover {{ color: var(--accent-hover); }}
 }}
 .footer a {{ color: var(--muted); }}
 
-/* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 640px) {{
   .hero h1 {{ font-size: 24px; }}
   .stats-row {{ gap: 20px; }}
@@ -769,7 +795,6 @@ def render_hero(summary: dict, analysis: dict) -> str:
     peak_hour = analysis.get("peak_hour", {})
     peak_h = peak_hour.get("hour", "")
     peak_c = peak_hour.get("count", "")
-
     headline = summary.get("headline", f"{summary.get('time_range', '')} 群聊精华")
     subheadline = summary.get("subheadline", summary.get("opening", ""))
     time_range = summary.get("time_range", "")
@@ -815,7 +840,17 @@ def render_hot_topics(topics: list[dict]) -> str:
     for t in topics:
         quote_html = ""
         if t.get("insight"):
-            quote_html = f'<div class="topic-quote">{e(t["insight"])}</div>'
+            attribution = t.get("attribution", "")
+            attr_html = f'<span class="attribution">—— {e(attribution)}</span>' if attribution else ""
+            quote_html = f'<div class="topic-quote">{e(t["insight"])}{attr_html}</div>'
+
+        # Show extra quotes if available
+        extra_html = ""
+        extra_quotes = t.get("quotes", [])
+        if len(extra_quotes) > 1:
+            q = extra_quotes[1]
+            extra_html = f'<div class="topic-extra">另有 {e(q["sender"])}: {e(q["text"][:60])}…</div>'
+
         cards += f"""
     <div class="topic-card">
       <div class="topic-header">
@@ -825,6 +860,7 @@ def render_hot_topics(topics: list[dict]) -> str:
       <div class="topic-title">{e(t["title"])}</div>
       <div class="topic-summary">{e(t["summary"])}</div>
       {quote_html}
+      {extra_html}
     </div>"""
 
     return f"""
@@ -833,7 +869,7 @@ def render_hot_topics(topics: list[dict]) -> str:
     <h2>热点话题</h2>
     <span class="badge">{len(topics)} 个</span>
   </div>
-  <p class="section-desc">群内讨论最集中的关键词和话题，按提及次数排列</p>
+  <p class="section-desc">群内讨论最集中的关键词，附真实聊天引用</p>
   <div class="card-grid">{cards}
   </div>
 </div>"""
@@ -909,16 +945,15 @@ def render_active_stars(stars: list[dict]) -> str:
 
     max_count = max(s["count"] for s in stars) if stars else 1
     cards = ""
+    colors = [
+        ("#f97316", "#fb923c"),
+        ("#5da9ff", "#7cc8ff"),
+        ("#a78bfa", "#c4b5fd"),
+        ("#34d399", "#6ee7b7"),
+        ("#f472b6", "#f9a8d4"),
+    ]
     for i, s in enumerate(stars):
         pct = (s["count"] / max_count * 100) if max_count else 0
-        # Gradient colors based on rank
-        colors = [
-            ("#f97316", "#fb923c"),  # orange
-            ("#5da9ff", "#7cc8ff"),  # blue
-            ("#a78bfa", "#c4b5fd"),  # purple
-            ("#34d399", "#6ee7b7"),  # green
-            ("#f472b6", "#f9a8d4"),  # pink
-        ]
         c1, c2 = colors[i % len(colors)]
         cards += f"""
     <div class="star-card">
@@ -946,8 +981,6 @@ def render_word_cloud(words: list[dict]) -> str:
     if not words:
         return ""
 
-    tags = ""
-    # Color palette for word cloud
     colors = [
         ("#f97316", "rgba(249,115,22,0.12)"),
         ("#5da9ff", "rgba(93,169,255,0.12)"),
@@ -957,6 +990,7 @@ def render_word_cloud(words: list[dict]) -> str:
         ("#fbbf24", "rgba(251,191,36,0.12)"),
     ]
 
+    tags = ""
     for i, w in enumerate(words):
         weight = w.get("weight", 0.5)
         size = max(12, int(12 + weight * 16))
@@ -1005,7 +1039,7 @@ def render_footer(group_name: str, time_range: str) -> str:
 <div class="footer">
   <p>{e(group_name)} · 每日群聊精华 · {e(time_range)}</p>
   <p style="margin-top:8px">由 IGN AI 社区自动生成 · {now}</p>
-  <p style="margin-top:12px"><a href="https://qianzhu.online/community/">← 返回社区首页</a></p>
+  <p style="margin-top:12px"><a href="https://qianzhu.online/community/ignai/DP/">← 返回日报档案</a></p>
 </div>"""
 
 
@@ -1076,15 +1110,13 @@ def main() -> None:
     analysis = read_json(analysis_path)
 
     if args.summary:
-        summary_path = Path(args.summary).expanduser().resolve()
-        summary = read_json(summary_path)
+        summary = read_json(Path(args.summary).expanduser().resolve())
     else:
         summary = auto_summary(analysis)
 
-    # Load logo if provided
+    # Load logo
     logo_data_uri = ""
     if args.logo:
-        import base64
         logo_path = Path(args.logo).expanduser().resolve()
         if logo_path.exists():
             ext = logo_path.suffix.lower().lstrip(".")
@@ -1092,24 +1124,45 @@ def main() -> None:
             data = logo_path.read_bytes()
             logo_data_uri = f"data:{mime};base64,{base64.b64encode(data).decode()}"
 
-    # Extract all content sections
-    topics = extract_hot_topics(analysis, summary)
-    needs = extract_needs(analysis, summary)
-    resources = extract_resources(summary, analysis)
-    stars = extract_active_stars(analysis)
-    words = extract_word_cloud(analysis)
-    quotes = extract_quotes(summary, analysis)
+    # Date string for filtering
+    dr = analysis.get("date_range", {})
+    date_str = dr.get("since", "")
 
-    # Render HTML
+    # Load messages
+    messages = load_messages(args.messages, analysis, date_str)
+
+    # Extract content sections from real messages
+    if messages:
+        topics = extract_topics_from_messages(messages, analysis)
+        needs = extract_needs_from_messages(messages)
+        resources = extract_resources_from_messages(messages)
+        quotes = extract_quotes_from_messages(messages)
+    else:
+        topics = extract_topics_from_analysis(analysis, summary)
+        needs = []
+        resources = []
+        quotes = []
+
+    # These always come from analysis
+    stars = [{"name": ts["name"], "count": ts["count"], "initial": ts["name"][0] if ts["name"] else "?"}
+             for ts in analysis.get("top_senders", [])[:10]]
+
+    words = []
+    for kw in analysis.get("keyword_hits", [])[:20]:
+        words.append({"word": kw["keyword"], "count": kw["count"]})
+    if words:
+        max_c = max(w["count"] for w in words)
+        for w in words:
+            w["weight"] = max(0.5, w["count"] / max_c)
+
+    # Render
     html_content = render_full_html(summary, analysis, topics, needs, resources, stars, words, quotes, logo_data_uri)
 
-    # Determine output path
+    # Output path
     if args.output:
         out_path = Path(args.output).expanduser().resolve()
     else:
         group_dir = analysis_path.parent.parent
-        dr = analysis.get("date_range", {})
-        date_str = dr.get("since", "unknown")
         out_path = group_dir / "dist" / f"ignai-daily-{date_str}.html"
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
